@@ -1,0 +1,96 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool, specifically when used with LiteIDE
+*.out
+
+# Go workspace file
+go.work
+
+# 构建输出
+bilibili-mcp
+bilibili-login
+dist/
+
+# 日志文件
+logs/
+*.log
+
+# 配置文件（保留示例）
+config.yaml
+!config.example.yaml
+
+# Cookies 和用户数据
+cookies/
+# 但保留示例账户配置结构文件
+!cookies/.gitkeep
+
+# IDE 文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+
+# 临时文件
+tmp/
+temp/
+
+# 测试覆盖率
+coverage.out
+coverage.html
+
+# 依赖缓存
+vendor/
+
+# Playwright 缓存
+.playwright/
+
+# 环境变量文件
+.env
+.env.local
+
+# 开发时的临时文件
+debug
+*.debug
+*.prof
+
+# Docker
+.dockerignore
+
+# 备份文件
+*.bak
+*.backup
+
+# 压缩文件
+*.tar.gz
+*.zip
+*.rar
+
+# 下载的媒体文件
+downloads/
+*.mp4
+*.mp3
+*.m4a
+*.wav
+*.flv
+*.mkv
+
+# 模型文件（Whisper等）
+models/
+*.bin
+*.ggml

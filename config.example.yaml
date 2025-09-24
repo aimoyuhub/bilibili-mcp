@@ -1,0 +1,36 @@
+# bilibili-mcp 配置文件示例
+# 复制此文件为 config.yaml 并根据需要修改
+
+server:
+  port: 18666
+  host: "localhost"
+
+bilibili:
+  base_url: "https://www.bilibili.com"
+  api_url: "https://api.bilibili.com"
+  passport_url: "https://passport.bilibili.com"
+  
+browser:
+  headless: true  # 是否无头模式，false 会显示浏览器窗口
+  user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  timeout: 30s    # 操作超时时间
+  pool_size: 2    # 浏览器池大小
+  viewport:
+    width: 1920   # 浏览器窗口宽度
+    height: 1080  # 浏览器窗口高度
+
+# 可选功能配置
+features:
+  whisper:
+    enabled: false  # 是否启用 Whisper 转录功能
+    model_path: "./models/ggml-base.bin"  # Whisper 模型文件路径
+    
+logging:
+  level: "info"   # 日志级别: debug, info, warn, error
+  format: "text"  # 日志格式: text, json
+  output: "./logs/bilibili-mcp.log"  # 日志文件路径，空字符串表示只输出到控制台
+
+# 多账号管理
+accounts:
+  cookie_dir: "./cookies"      # Cookies 存储目录
+  default_account: ""          # 默认账号名称，空字符串表示自动选择
