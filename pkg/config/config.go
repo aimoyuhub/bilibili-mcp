@@ -92,7 +92,7 @@ type ResolvedPaths struct {
 
 var globalConfig *Config
 
-// Load 加载配置文件
+// Load 加载配置文件，如果文件不存在则使用默认值
 func Load(configPath string) (*Config, error) {
 	viper.SetConfigFile(configPath)
 	viper.SetConfigType("yaml")
@@ -100,19 +100,26 @@ func Load(configPath string) (*Config, error) {
 	// 设置默认值
 	setDefaults()
 
+	// 尝试读取配置文件，如果文件不存在则使用默认值
 	if err := viper.ReadInConfig(); err != nil {
-		return nil, err
+		// 如果是文件不存在的错误，使用默认配置
+		if os.IsNotExist(err) {
+			fmt.Printf("⚠️  配置文件 %s 不存在，使用默认配置\n", configPath)
+		} else {
+			// 其他错误（如格式错误）仍然返回错误
+			return nil, fmt.Errorf("读取配置文件失败: %w", err)
+		}
 	}
 
 	var config Config
 	if err := viper.Unmarshal(&config); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("解析配置失败: %w", err)
 	}
 
 	// 解析路径到单独的结构中，不修改原始配置
 	resolved, err := createResolvedPaths(&config)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("解析配置路径失败: %w", err)
 	}
 	config.resolved = resolved
 
@@ -143,7 +150,7 @@ func setDefaults() {
 
 	viper.SetDefault("features.whisper.enabled", false)
 	viper.SetDefault("features.whisper.whisper_cpp_path", "")
-	viper.SetDefault("features.whisper.model_path", "./models/ggml-tiny.bin")
+	viper.SetDefault("features.whisper.model_path", "./models/ggml-base.bin")
 	viper.SetDefault("features.whisper.default_model", "auto") // auto表示智能选择最佳可用模型
 	viper.SetDefault("features.whisper.language", "zh")
 	viper.SetDefault("features.whisper.cpu_threads", 4)
