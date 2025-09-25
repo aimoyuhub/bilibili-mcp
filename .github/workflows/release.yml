@@ -39,6 +39,8 @@ jobs:
           echo "⬇️  下载 ggml-base.bin..."
           curl -L -o ggml-base.bin "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin?download=true"
           echo "✅ ggml-base.bin 下载完成"
+        else
+          echo "✅ ggml-base.bin 已存在"
         fi
         
         # 下载 macOS Core ML 模型

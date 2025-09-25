@@ -112,7 +112,7 @@ claude mcp add --transport http bilibili-mcp http://localhost:18666/mcp
 
 - **音频格式**: MP3, WAV, M4A, FLAC 等
 - **语言支持**: 中文、英文、日语、自动检测
-- **智能模型选择**: 系统自动选择最佳可用模型
+- **智能模型选择**: 系统自动选择最佳可用模型（默认使用 base 模型）
 - **离线转录**: 完全本地处理，保护隐私
 
 ## 🛠️ MCP工具列表
