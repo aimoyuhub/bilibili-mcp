@@ -135,7 +135,8 @@ release: build-all prepare-models
 	@echo "📦 打包 macOS Apple Silicon (包含 Core ML 加速)..."
 	cd dist && \
 	mkdir -p darwin-arm64-package && \
-	cp $(APP_NAME)-darwin-arm64 $(LOGIN_NAME)-darwin-arm64 $(WHISPER_INIT_NAME)-darwin-arm64 darwin-arm64-package/ && \
+	cp $(APP_NAME)-darwin-arm64 $(LOGIN_NAME)-darwin-arm64 darwin-arm64-package/ && \
+	cp ../config.example.yaml darwin-arm64-package/config.yaml && \
 	mkdir -p darwin-arm64-package/models && \
 	cp ../models/ggml-base.bin darwin-arm64-package/models/ && \
 	if [ -d "../models/ggml-base.en-encoder.mlmodelc" ]; then \
@@ -148,7 +149,8 @@ release: build-all prepare-models
 	@echo "📦 打包 macOS Intel (包含 Core ML 加速)..."
 	cd dist && \
 	mkdir -p darwin-amd64-package && \
-	cp $(APP_NAME)-darwin-amd64 $(LOGIN_NAME)-darwin-amd64 $(WHISPER_INIT_NAME)-darwin-amd64 darwin-amd64-package/ && \
+	cp $(APP_NAME)-darwin-amd64 $(LOGIN_NAME)-darwin-amd64 darwin-amd64-package/ && \
+	cp ../config.example.yaml darwin-amd64-package/config.yaml && \
 	mkdir -p darwin-amd64-package/models && \
 	cp ../models/ggml-base.bin darwin-amd64-package/models/ && \
 	if [ -d "../models/ggml-base.en-encoder.mlmodelc" ]; then \
@@ -161,7 +163,8 @@ release: build-all prepare-models
 	@echo "📦 打包 Windows (基础模型)..."
 	cd dist && \
 	mkdir -p windows-amd64-package && \
-	cp $(APP_NAME)-windows-amd64.exe $(LOGIN_NAME)-windows-amd64.exe $(WHISPER_INIT_NAME)-windows-amd64.exe windows-amd64-package/ && \
+	cp $(APP_NAME)-windows-amd64.exe $(LOGIN_NAME)-windows-amd64.exe windows-amd64-package/ && \
+	cp ../config.example.yaml windows-amd64-package/config.yaml && \
 	mkdir -p windows-amd64-package/models && \
 	cp ../models/ggml-base.bin windows-amd64-package/models/ && \
 	zip -r -q $(APP_NAME)-v$(VERSION)-windows-amd64.zip windows-amd64-package && \
@@ -171,7 +174,8 @@ release: build-all prepare-models
 	@echo "📦 打包 Linux (基础模型)..."
 	cd dist && \
 	mkdir -p linux-amd64-package && \
-	cp $(APP_NAME)-linux-amd64 $(LOGIN_NAME)-linux-amd64 $(WHISPER_INIT_NAME)-linux-amd64 linux-amd64-package/ && \
+	cp $(APP_NAME)-linux-amd64 $(LOGIN_NAME)-linux-amd64 linux-amd64-package/ && \
+	cp ../config.example.yaml linux-amd64-package/config.yaml && \
 	mkdir -p linux-amd64-package/models && \
 	cp ../models/ggml-base.bin linux-amd64-package/models/ && \
 	tar -czf $(APP_NAME)-v$(VERSION)-linux-amd64.tar.gz -C linux-amd64-package . && \

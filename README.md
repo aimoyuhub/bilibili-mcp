@@ -23,11 +23,22 @@
 
 #### 方式一：下载预编译版本（推荐）
 
-前往 [Releases 页面](https://github.com/shirenchuang/bilibili-mcp/releases) 下载对应平台的版本：
+前往 [Releases 页面](https://github.com/aimoyuhub/bilibili-mcp/releases) 下载对应平台的版本：
 
 - **macOS 用户**: 下载 `bilibili-mcp-vX.X.X-darwin-arm64.tar.gz` (Apple Silicon) 或 `darwin-amd64.tar.gz` (Intel)
 - **Windows 用户**: 下载 `bilibili-mcp-vX.X.X-windows-amd64.zip`  
 - **Linux 用户**: 下载 `bilibili-mcp-vX.X.X-linux-amd64.tar.gz`
+
+**📦 发布包内容**：
+```
+bilibili-mcp-vX.X.X-darwin-arm64/
+├── bilibili-mcp          # 主服务程序
+├── bilibili-login        # 登录工具
+├── config.yaml          # 配置文件（已包含默认配置）
+└── models/              # Whisper 模型文件夹
+    ├── ggml-base.bin    # 基础模型 (~142MB)
+    └── ggml-base.en-encoder.mlmodelc/  # Core ML 模型（仅 macOS，~38MB）
+```
 
 解压后即可使用，macOS版本包含Core ML加速模型，转录速度提升2-3倍。
 
