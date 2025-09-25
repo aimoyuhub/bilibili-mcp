@@ -1,6 +1,10 @@
 package config
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -14,6 +18,9 @@ type Config struct {
 	Features FeaturesConfig `mapstructure:"features"`
 	Logging  LoggingConfig  `mapstructure:"logging"`
 	Accounts AccountsConfig `mapstructure:"accounts"`
+
+	// 运行时解析的路径（不保存到文件）
+	resolved *ResolvedPaths
 }
 
 // ServerConfig 服务器配置
@@ -51,8 +58,15 @@ type FeaturesConfig struct {
 
 // WhisperConfig Whisper配置
 type WhisperConfig struct {
-	Enabled   bool   `mapstructure:"enabled"`
-	ModelPath string `mapstructure:"model_path"`
+	Enabled        bool   `mapstructure:"enabled"`
+	WhisperCppPath string `mapstructure:"whisper_cpp_path"`
+	ModelPath      string `mapstructure:"model_path"`
+	DefaultModel   string `mapstructure:"default_model"`
+	Language       string `mapstructure:"language"`
+	CPUThreads     int    `mapstructure:"cpu_threads"`
+	TimeoutSeconds int    `mapstructure:"timeout_seconds"`
+	EnableGPU      bool   `mapstructure:"enable_gpu"`
+	EnableCoreMl   bool   `mapstructure:"enable_core_ml"`
 }
 
 // LoggingConfig 日志配置
@@ -66,6 +80,14 @@ type LoggingConfig struct {
 type AccountsConfig struct {
 	CookieDir      string `mapstructure:"cookie_dir"`
 	DefaultAccount string `mapstructure:"default_account"`
+}
+
+// ResolvedPaths 运行时解析的路径
+type ResolvedPaths struct {
+	WhisperCppPath string
+	ModelPath      string
+	LogOutput      string
+	CookieDir      string
 }
 
 var globalConfig *Config
@@ -86,6 +108,13 @@ func Load(configPath string) (*Config, error) {
 	if err := viper.Unmarshal(&config); err != nil {
 		return nil, err
 	}
+
+	// 解析路径到单独的结构中，不修改原始配置
+	resolved, err := createResolvedPaths(&config)
+	if err != nil {
+		return nil, err
+	}
+	config.resolved = resolved
 
 	globalConfig = &config
 	return &config, nil
@@ -113,7 +142,14 @@ func setDefaults() {
 	viper.SetDefault("browser.viewport.height", 1080)
 
 	viper.SetDefault("features.whisper.enabled", false)
-	viper.SetDefault("features.whisper.model_path", "./models/ggml-base.bin")
+	viper.SetDefault("features.whisper.whisper_cpp_path", "")
+	viper.SetDefault("features.whisper.model_path", "./models/ggml-tiny.bin")
+	viper.SetDefault("features.whisper.default_model", "auto") // auto表示智能选择最佳可用模型
+	viper.SetDefault("features.whisper.language", "zh")
+	viper.SetDefault("features.whisper.cpu_threads", 4)
+	viper.SetDefault("features.whisper.timeout_seconds", 1200)
+	viper.SetDefault("features.whisper.enable_gpu", true)
+	viper.SetDefault("features.whisper.enable_core_ml", true)
 
 	viper.SetDefault("logging.level", "info")
 	viper.SetDefault("logging.format", "text")
@@ -121,4 +157,114 @@ func setDefaults() {
 
 	viper.SetDefault("accounts.cookie_dir", "./cookies")
 	viper.SetDefault("accounts.default_account", "")
+}
+
+// createResolvedPaths 创建解析后的路径结构，不修改原始配置
+func createResolvedPaths(config *Config) (*ResolvedPaths, error) {
+	resolved := &ResolvedPaths{}
+	var err error
+
+	// 解析 Whisper 相关路径
+	if config.Features.Whisper.WhisperCppPath != "" {
+		resolved.WhisperCppPath, err = resolvePath(config.Features.Whisper.WhisperCppPath)
+		if err != nil {
+			return nil, fmt.Errorf("解析whisper_cpp_path失败: %w", err)
+		}
+	}
+
+	if config.Features.Whisper.ModelPath != "" {
+		resolved.ModelPath, err = resolvePath(config.Features.Whisper.ModelPath)
+		if err != nil {
+			return nil, fmt.Errorf("解析model_path失败: %w", err)
+		}
+	}
+
+	// 解析日志输出路径
+	if config.Logging.Output != "" {
+		resolved.LogOutput, err = resolvePath(config.Logging.Output)
+		if err != nil {
+			return nil, fmt.Errorf("解析log output失败: %w", err)
+		}
+	}
+
+	// 解析 Cookie 目录
+	if config.Accounts.CookieDir != "" {
+		resolved.CookieDir, err = resolvePath(config.Accounts.CookieDir)
+		if err != nil {
+			return nil, fmt.Errorf("解析cookie_dir失败: %w", err)
+		}
+	}
+
+	return resolved, nil
+}
+
+// resolvePath 解析单个路径，支持：
+// 1. 环境变量替换 (${VAR} 或 $VAR)
+// 2. 用户目录展开 (~)
+// 3. 相对路径转绝对路径
+// 4. 路径验证
+func resolvePath(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+
+	originalPath := path
+
+	// 1. 环境变量替换
+	path = os.ExpandEnv(path)
+
+	// 2. 用户目录展开
+	if strings.HasPrefix(path, "~/") {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("无法获取用户目录: %w", err)
+		}
+		path = filepath.Join(homeDir, path[2:])
+	}
+
+	// 3. 如果是相对路径，转换为绝对路径
+	if !filepath.IsAbs(path) {
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			return "", fmt.Errorf("无法转换为绝对路径 '%s': %w", originalPath, err)
+		}
+		path = absPath
+	}
+
+	// 4. 路径清理
+	path = filepath.Clean(path)
+
+	return path, nil
+}
+
+// GetResolvedWhisperCppPath 获取解析后的whisper.cpp路径
+func (c *Config) GetResolvedWhisperCppPath() string {
+	if c.resolved != nil && c.resolved.WhisperCppPath != "" {
+		return c.resolved.WhisperCppPath
+	}
+	return c.Features.Whisper.WhisperCppPath
+}
+
+// GetResolvedModelPath 获取解析后的模型路径
+func (c *Config) GetResolvedModelPath() string {
+	if c.resolved != nil && c.resolved.ModelPath != "" {
+		return c.resolved.ModelPath
+	}
+	return c.Features.Whisper.ModelPath
+}
+
+// GetResolvedLogOutput 获取解析后的日志输出路径
+func (c *Config) GetResolvedLogOutput() string {
+	if c.resolved != nil && c.resolved.LogOutput != "" {
+		return c.resolved.LogOutput
+	}
+	return c.Logging.Output
+}
+
+// GetResolvedCookieDir 获取解析后的Cookie目录路径
+func (c *Config) GetResolvedCookieDir() string {
+	if c.resolved != nil && c.resolved.CookieDir != "" {
+		return c.resolved.CookieDir
+	}
+	return c.Accounts.CookieDir
 }

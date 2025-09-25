@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -153,50 +154,50 @@ func (s *Server) handlePostComment(ctx context.Context, args map[string]interfac
 	return s.createToolResult(result, false)
 }
 
-// handlePostImageComment 发表图片评论
-func (s *Server) handlePostImageComment(ctx context.Context, args map[string]interface{}) *MCPToolResult {
-	videoID, ok := args["video_id"].(string)
-	if !ok || videoID == "" {
-		return s.createToolResult("缺少video_id参数", true)
-	}
+// 暂时注释 - handlePostImageComment 发表图片评论功能暂不提供
+// func (s *Server) handlePostImageComment(ctx context.Context, args map[string]interface{}) *MCPToolResult {
+// 	videoID, ok := args["video_id"].(string)
+// 	if !ok || videoID == "" {
+// 		return s.createToolResult("缺少video_id参数", true)
+// 	}
 
-	content, ok := args["content"].(string)
-	if !ok || content == "" {
-		return s.createToolResult("缺少content参数", true)
-	}
+// 	content, ok := args["content"].(string)
+// 	if !ok || content == "" {
+// 		return s.createToolResult("缺少content参数", true)
+// 	}
 
-	imagePath, ok := args["image_path"].(string)
-	if !ok || imagePath == "" {
-		return s.createToolResult("缺少image_path参数", true)
-	}
+// 	imagePath, ok := args["image_path"].(string)
+// 	if !ok || imagePath == "" {
+// 		return s.createToolResult("缺少image_path参数", true)
+// 	}
 
-	if err := s.validateVideoID(videoID); err != nil {
-		return s.createErrorResult(err)
-	}
+// 	if err := s.validateVideoID(videoID); err != nil {
+// 		return s.createErrorResult(err)
+// 	}
 
-	// 提醒用户图片评论较慢
-	logger.Warn("图片评论使用浏览器自动化，可能需要30-60秒，请耐心等待...")
+// 	// 提醒用户图片评论较慢
+// 	logger.Warn("图片评论使用浏览器自动化，可能需要30-60秒，请耐心等待...")
 
-	accountName := s.getAccountName(args)
+// 	accountName := s.getAccountName(args)
 
-	// 获取带认证的浏览器页面，设置更长的超时时间
-	page, cleanup, err := s.browserPool.GetWithAuth(accountName)
-	if err != nil {
-		return s.createErrorResult(err)
-	}
-	defer cleanup()
+// 	// 获取带认证的浏览器页面，设置更长的超时时间
+// 	page, cleanup, err := s.browserPool.GetWithAuth(accountName)
+// 	if err != nil {
+// 		return s.createErrorResult(err)
+// 	}
+// 	defer cleanup()
 
-	// 创建评论服务
-	commentService := comment.NewCommentService(page)
+// 	// 创建评论服务
+// 	commentService := comment.NewCommentService(page)
 
-	// 发表图片评论（这个操作可能需要较长时间）
-	if err := commentService.PostImageComment(ctx, videoID, content, imagePath); err != nil {
-		return s.createErrorResult(err)
-	}
+// 	// 发表图片评论（这个操作可能需要较长时间）
+// 	if err := commentService.PostImageComment(ctx, videoID, content, imagePath); err != nil {
+// 		return s.createErrorResult(err)
+// 	}
 
-	result := fmt.Sprintf("图片评论发表成功！\n视频: %s\n注意: 由于使用浏览器自动化，图片评论无法获取评论ID和链接", videoID)
-	return s.createToolResult(result, false)
-}
+// 	result := fmt.Sprintf("图片评论发表成功！\n视频: %s\n注意: 由于使用浏览器自动化，图片评论无法获取评论ID和链接", videoID)
+// 	return s.createToolResult(result, false)
+// }
 
 // handleReplyComment 回复评论
 func (s *Server) handleReplyComment(ctx context.Context, args map[string]interface{}) *MCPToolResult {
@@ -391,37 +392,109 @@ func (s *Server) handleDownloadMedia(ctx context.Context, args map[string]interf
 		return s.createErrorResult(errors.Wrap(err, "下载媒体失败"))
 	}
 
-	// 格式化输出
-	jsonData, err := json.MarshalIndent(result, "", "  ")
-	if err != nil {
-		return s.createErrorResult(err)
-	}
-
-	// 构建提示信息
+	// 构建格式化的结果信息
 	var message strings.Builder
-	message.WriteString(fmt.Sprintf("媒体下载完成！类型: %s, 清晰度: %s\n\n", result.MediaType, result.QualityDesc))
+	message.WriteString("🎉 媒体下载完成！\n\n")
 
-	// 添加文件路径信息
-	if result.AudioPath != "" {
-		message.WriteString(fmt.Sprintf("音频文件: %s\n", result.AudioPath))
+	// 基本信息
+	message.WriteString("1. 视频信息\n")
+	message.WriteString(fmt.Sprintf("   • 标题: %s\n", result.Title))
+	message.WriteString(fmt.Sprintf("   • 类型: %s\n", result.MediaType))
+	message.WriteString(fmt.Sprintf("   • 时长: %d秒\n\n", result.Duration))
+
+	// 当前下载清晰度信息
+	message.WriteString("2. 当前下载清晰度\n")
+	message.WriteString(fmt.Sprintf("   • 清晰度: %s", result.CurrentQuality.Description))
+	if result.CurrentQuality.Width > 0 && result.CurrentQuality.Height > 0 {
+		message.WriteString(fmt.Sprintf(" (%dx%d)", result.CurrentQuality.Width, result.CurrentQuality.Height))
 	}
-	if result.VideoPath != "" {
-		message.WriteString(fmt.Sprintf("视频文件: %s\n", result.VideoPath))
+	if result.CurrentQuality.HasAudio {
+		message.WriteString(" [包含音频]")
+	} else {
+		message.WriteString(" [纯视频，需合并音频]")
 	}
+	message.WriteString("\n\n")
+
+	// 可用清晰度列表
+	if len(result.AvailableQualities) > 0 {
+		message.WriteString("3. 所有可用清晰度\n")
+		for i, quality := range result.AvailableQualities {
+			marker := "   "
+			if quality.Quality == result.CurrentQuality.Quality {
+				marker = " ✓ " // 标记当前选择的清晰度
+			}
+
+			message.WriteString(fmt.Sprintf("%s%s", marker, quality.Description))
+			if quality.Width > 0 && quality.Height > 0 {
+				message.WriteString(fmt.Sprintf(" (%dx%d)", quality.Width, quality.Height))
+			}
+			if quality.HasAudio {
+				message.WriteString(" [完整视频]")
+			} else {
+				message.WriteString(" [需合并]")
+			}
+			message.WriteString("\n")
+
+			// 限制显示数量，避免信息过多
+			if i >= 9 {
+				remaining := len(result.AvailableQualities) - i - 1
+				if remaining > 0 {
+					message.WriteString(fmt.Sprintf("   ... 还有 %d 个清晰度可选\n", remaining))
+				}
+				break
+			}
+		}
+		message.WriteString("\n")
+	}
+
+	// 文件信息
+	sectionNum := 4
+	if len(result.AvailableQualities) == 0 {
+		sectionNum = 3
+	}
+	message.WriteString(fmt.Sprintf("%d. 下载文件\n", sectionNum))
+	fileCount := 1
 	if result.MergedPath != "" {
-		message.WriteString(fmt.Sprintf("合并文件: %s\n", result.MergedPath))
+		message.WriteString(fmt.Sprintf("   %d) 完整视频: %s (%.2f MB)\n",
+			fileCount, filepath.Base(result.MergedPath), float64(result.MergedSize)/(1024*1024)))
+		fileCount++
+	}
+	if result.AudioPath != "" && result.MergedPath == "" {
+		message.WriteString(fmt.Sprintf("   %d) 音频文件: %s (%.2f MB)\n",
+			fileCount, filepath.Base(result.AudioPath), float64(result.AudioSize)/(1024*1024)))
+		fileCount++
+	}
+	if result.VideoPath != "" && result.MergedPath == "" {
+		message.WriteString(fmt.Sprintf("   %d) 视频文件: %s (%.2f MB)\n",
+			fileCount, filepath.Base(result.VideoPath), float64(result.VideoSize)/(1024*1024)))
+		fileCount++
 	}
 
-	// 添加合并提示
-	if result.MergeRequired && result.MergeCommand != "" {
-		message.WriteString(fmt.Sprintf("\n⚠️  需要合并音视频文件，请运行以下命令：\n%s\n", result.MergeCommand))
+	// 合并提示和高清视频建议
+	sectionNum++
+	needsSection := result.MergeRequired || (!result.CurrentQuality.HasAudio && result.MediaType == download.MediaTypeMerged)
+
+	if needsSection {
+		message.WriteString(fmt.Sprintf("\n%d. 重要提示\n", sectionNum))
+
+		if result.MergeRequired && result.MergeCommand != "" {
+			message.WriteString("   ⚠️  当前下载的视频为：纯视频 + 音频，需要手动合并\n")
+			message.WriteString(fmt.Sprintf("   请执行：%s\n", result.MergeCommand))
+		}
+
+		// 如果下载的是纯视频，提示用户可以下载高清
+		if !result.CurrentQuality.HasAudio && result.MediaType == download.MediaTypeMerged {
+			message.WriteString("\n   💡 提示：如果需要更高清晰度的视频，可以指定 quality 参数\n")
+			message.WriteString("   例如：quality=80 (1080P), quality=112 (1080P+), quality=120 (4K)\n")
+			message.WriteString("   高清视频会自动下载音频并提供合并命令\n")
+		}
 	}
 
-	if result.Notes != "" {
-		message.WriteString(fmt.Sprintf("\n📝 %s\n", result.Notes))
+	// 其他提示
+	if result.Notes != "" && !result.MergeRequired && !needsSection {
+		message.WriteString(fmt.Sprintf("\n%d. 提示信息\n", sectionNum))
+		message.WriteString(fmt.Sprintf("   📝 %s\n", result.Notes))
 	}
-
-	message.WriteString(fmt.Sprintf("\n详细信息：\n%s", string(jsonData)))
 
 	return s.createToolResult(message.String(), false)
 }
@@ -788,31 +861,125 @@ func (s *Server) handleFollowUser(ctx context.Context, args map[string]interface
 
 // 可选功能处理器
 
-// handleTranscribeVideo 转录视频
-func (s *Server) handleTranscribeVideo(ctx context.Context, args map[string]interface{}) *MCPToolResult {
-	videoID, ok := args["video_id"].(string)
-	if !ok || videoID == "" {
-		return s.createToolResult("缺少video_id参数", true)
-	}
-
-	if err := s.validateVideoID(videoID); err != nil {
-		return s.createErrorResult(err)
-	}
-
-	language := "zh"
-	if lang, ok := args["language"].(string); ok {
-		language = lang
+// handleWhisperAudio2Text 使用Whisper.cpp转录音频
+func (s *Server) handleWhisperAudio2Text(ctx context.Context, args map[string]interface{}) *MCPToolResult {
+	audioPath, ok := args["audio_path"].(string)
+	if !ok || audioPath == "" {
+		return s.createToolResult("缺少audio_path参数", true)
 	}
 
 	// 检查Whisper是否启用
 	if !s.config.Features.Whisper.Enabled {
-		return s.createToolResult("Whisper功能未启用，请在配置文件中启用并安装Whisper", true)
+		return s.createToolResult("Whisper功能未启用，请先运行 ./bilibili-whisper-init 进行初始化", true)
 	}
 
-	// TODO: 实现视频转录功能
-	logger.Infof("转录视频 - 视频: %s, 语言: %s", videoID, language)
+	// 获取语言参数
+	language := s.config.Features.Whisper.Language
+	if lang, ok := args["language"].(string); ok && lang != "" {
+		language = lang
+	}
 
-	return s.createToolResult("视频转录功能正在开发中", false)
+	// 获取模型参数（可选）
+	requestedModel := s.config.Features.Whisper.DefaultModel
+	if m, ok := args["model"].(string); ok && m != "" {
+		requestedModel = m
+	}
+
+	logger.Infof("开始音频转录 - 文件: %s, 语言: %s, 请求模型: %s", audioPath, language, requestedModel)
+
+	// 创建Whisper服务
+	whisperService, err := s.getOrCreateWhisperService()
+	if err != nil {
+		return s.createErrorResult(err)
+	}
+
+	// 如果用户指定了不同的参数，需要创建临时配置
+	// 但由于whisper服务现在使用完整配置，我们需要在服务层面处理这些参数
+	// 这里暂时保持原有逻辑，在后续优化中可以改进
+
+	// 执行转录
+	result, err := whisperService.TranscribeAudio(ctx, audioPath)
+	if err != nil {
+		return s.createErrorResult(errors.Wrap(err, "音频转录失败"))
+	}
+
+	// 构建结果消息
+	var message strings.Builder
+	message.WriteString("🎤 音频转录完成！\n\n")
+
+	message.WriteString("📁 文件信息\n")
+	message.WriteString(fmt.Sprintf("   • 音频文件: %s\n", filepath.Base(result.AudioPath)))
+	message.WriteString(fmt.Sprintf("   • SRT文件: %s\n", filepath.Base(result.OutputPath)))
+	message.WriteString(fmt.Sprintf("   • 处理时间: %.2f秒\n\n", result.ProcessTime))
+
+	message.WriteString("⚙️ 转录配置\n")
+	message.WriteString(fmt.Sprintf("   • 模型: %s\n", result.Model))
+	message.WriteString(fmt.Sprintf("   • 语言: %s\n", result.Language))
+	message.WriteString(fmt.Sprintf("   • 加速类型: %s\n", result.AccelerationType))
+	message.WriteString(fmt.Sprintf("   • 创建时间: %s\n\n", result.CreatedAt.Format("2006-01-02 15:04:05")))
+
+	message.WriteString("📝 转录文本\n")
+	message.WriteString("=" + strings.Repeat("=", 50) + "\n")
+	message.WriteString(result.Text)
+	message.WriteString("\n" + strings.Repeat("=", 51) + "\n")
+
+	// 转换为绝对路径
+	absOutputPath, err := filepath.Abs(result.OutputPath)
+	if err != nil {
+		absOutputPath = result.OutputPath // 如果转换失败，使用原路径
+	}
+	message.WriteString(fmt.Sprintf("\n💾 详细的时间轴信息已保存到: %s", absOutputPath))
+
+	// 添加可用模型信息
+	if len(result.AvailableModels) > 0 {
+		message.WriteString("\n\n📚 当前可用模型\n")
+		for i, model := range result.AvailableModels {
+			marker := "   "
+			if model.Name == result.Model {
+				marker = " ✅ " // 标记当前使用的模型
+			}
+
+			// 格式化文件大小
+			sizeStr := formatFileSize(model.Size)
+
+			message.WriteString(fmt.Sprintf("%s%s - %s", marker, model.Name, model.Description))
+			if model.IsCoreMl {
+				message.WriteString(" 🚀")
+			}
+			message.WriteString(fmt.Sprintf(" [%s]\n", sizeStr))
+
+			// 限制显示数量，避免信息过多
+			if i >= 9 {
+				remaining := len(result.AvailableModels) - i - 1
+				if remaining > 0 {
+					message.WriteString(fmt.Sprintf("   ... 还有 %d 个模型可用\n", remaining))
+				}
+				break
+			}
+		}
+	}
+
+	return s.createToolResult(message.String(), false)
+}
+
+// formatFileSize 格式化文件大小
+func formatFileSize(size int64) string {
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+	)
+
+	switch {
+	case size >= GB:
+		return fmt.Sprintf("%.1fGB", float64(size)/GB)
+	case size >= MB:
+		return fmt.Sprintf("%.1fMB", float64(size)/MB)
+	case size >= KB:
+		return fmt.Sprintf("%.1fKB", float64(size)/KB)
+	default:
+		return fmt.Sprintf("%dB", size)
+	}
 }
 
 // handleGetVideoStream 获取视频流地址
@@ -822,32 +989,30 @@ func (s *Server) handleGetVideoStream(ctx context.Context, args map[string]inter
 		return s.createToolResult("缺少video_id参数", true)
 	}
 
-	cidValue, ok := args["cid"]
-	if !ok {
-		return s.createToolResult("缺少cid参数", true)
-	}
-
+	// CID现在是可选参数，如果没有提供就自动获取
 	var cid int64
-	switch v := cidValue.(type) {
-	case float64:
-		cid = int64(v)
-	case int:
-		cid = int64(v)
-	case int64:
-		cid = v
-	case string:
-		parsed, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			return s.createToolResult("cid参数格式错误", true)
+	if cidValue, ok := args["cid"]; ok {
+		switch v := cidValue.(type) {
+		case float64:
+			cid = int64(v)
+		case int:
+			cid = int64(v)
+		case int64:
+			cid = v
+		case string:
+			parsed, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return s.createToolResult("cid参数格式错误", true)
+			}
+			cid = parsed
+		default:
+			return s.createToolResult("cid参数类型错误", true)
 		}
-		cid = parsed
-	default:
-		return s.createToolResult("cid参数类型错误", true)
-	}
 
-	// 验证CID不能为0
-	if cid <= 0 {
-		return s.createToolResult("CID参数不能为0。请先使用 get_video_info 工具获取视频信息，从返回结果中的 pages 数组获取正确的 CID", true)
+		// 验证CID不能为0
+		if cid <= 0 {
+			return s.createToolResult("CID参数不能为0", true)
+		}
 	}
 
 	// 可选参数
@@ -894,6 +1059,26 @@ func (s *Server) handleGetVideoStream(ctx context.Context, args map[string]inter
 	// 创建API客户端
 	client := api.NewClient(cookieMap)
 
+	// 如果没有提供CID，自动获取视频信息来获取CID
+	if cid == 0 {
+		videoInfo, err := client.GetVideoInfo(videoID)
+		if err != nil {
+			return s.createToolResult(fmt.Sprintf("获取视频信息失败: %v", err), true)
+		}
+
+		if videoInfo.Code != 0 {
+			return s.createToolResult(fmt.Sprintf("获取视频信息失败: %s (code: %d)", videoInfo.Message, videoInfo.Code), true)
+		}
+
+		if len(videoInfo.Data.Pages) == 0 {
+			return s.createToolResult("该视频没有可用的分P", true)
+		}
+
+		// 使用第一个分P的CID
+		cid = videoInfo.Data.Pages[0].Cid
+		logger.Infof("自动获取到CID: %d", cid)
+	}
+
 	logger.Infof("获取视频流 - 视频ID: %s, CID: %d, 清晰度: %d, 格式: %d, 平台: %s, 账号: %s",
 		videoID, cid, quality, fnval, platform, accountName)
 
@@ -903,36 +1088,105 @@ func (s *Server) handleGetVideoStream(ctx context.Context, args map[string]inter
 		return s.createToolResult(fmt.Sprintf("获取视频流失败: %v", err), true)
 	}
 
-	// 构建返回结果
+	// 构建简化的播放地址结果
 	result := map[string]interface{}{
-		"video_id":           videoID,
-		"cid":                cid,
-		"quality":            streamResp.Data.Quality,
-		"format":             streamResp.Data.Format,
-		"time_length":        streamResp.Data.TimeLength,
-		"accept_quality":     streamResp.Data.AcceptQuality,
-		"accept_description": streamResp.Data.AcceptDescription,
-		"support_formats":    streamResp.Data.SupportFormats,
-		"usage_note":         "注意：视频流URL需要正确的Referer和User-Agent才能访问。浏览器直接访问会失败，请使用下载工具如curl/wget，并设置Referer为视频页面URL",
+		"video_id":   videoID,
+		"cid":        cid,
+		"quality":    streamResp.Data.Quality,
+		"duration":   streamResp.Data.TimeLength / 1000, // 转换为秒
+		"usage_note": "注意：播放地址需要正确的Referer和User-Agent才能访问",
 	}
 
-	// 根据格式类型添加相应的流信息
+	// 提取播放地址
+	playUrls := make(map[string]interface{})
+
+	// DASH格式的音视频流
 	if streamResp.Data.DASH != nil {
-		result["dash"] = map[string]interface{}{
-			"duration": streamResp.Data.DASH.Duration,
-			"video":    streamResp.Data.DASH.Video,
-			"audio":    streamResp.Data.DASH.Audio,
+		// 视频流地址
+		if len(streamResp.Data.DASH.Video) > 0 {
+			videoStreams := make([]map[string]interface{}, 0)
+			for _, video := range streamResp.Data.DASH.Video {
+				videoStreams = append(videoStreams, map[string]interface{}{
+					"quality":    getQualityDescription(video.ID),
+					"resolution": fmt.Sprintf("%dx%d", video.Width, video.Height),
+					"url":        video.BaseURL,
+					"codecs":     video.Codecs,
+					"bandwidth":  video.Bandwidth,
+				})
+			}
+			playUrls["video_streams"] = videoStreams
 		}
-		if streamResp.Data.DASH.Dolby != nil {
-			result["dolby"] = streamResp.Data.DASH.Dolby
+
+		// 音频流地址
+		if len(streamResp.Data.DASH.Audio) > 0 {
+			audioStreams := make([]map[string]interface{}, 0)
+			for _, audio := range streamResp.Data.DASH.Audio {
+				audioStreams = append(audioStreams, map[string]interface{}{
+					"quality":   fmt.Sprintf("ID_%d", audio.ID),
+					"url":       audio.BaseURL,
+					"codecs":    audio.Codecs,
+					"bandwidth": audio.Bandwidth,
+				})
+			}
+			playUrls["audio_streams"] = audioStreams
 		}
-		if streamResp.Data.DASH.FLAC != nil {
-			result["flac"] = streamResp.Data.DASH.FLAC
+
+		// 推荐的最佳流
+		if len(streamResp.Data.DASH.Video) > 0 && len(streamResp.Data.DASH.Audio) > 0 {
+			// 选择最佳视频流（通常是第一个）
+			bestVideo := streamResp.Data.DASH.Video[0]
+			for _, video := range streamResp.Data.DASH.Video {
+				if video.ID == streamResp.Data.Quality {
+					bestVideo = video
+					break
+				}
+			}
+
+			// 选择最佳音频流（带宽最高）
+			bestAudio := streamResp.Data.DASH.Audio[0]
+			for _, audio := range streamResp.Data.DASH.Audio {
+				if audio.Bandwidth > bestAudio.Bandwidth {
+					bestAudio = audio
+				}
+			}
+
+			playUrls["recommended"] = map[string]interface{}{
+				"video_url": bestVideo.BaseURL,
+				"audio_url": bestAudio.BaseURL,
+				"note":      "DASH格式需要分别下载音视频后用ffmpeg合并",
+			}
 		}
 	}
 
+	// MP4格式的合并流
 	if len(streamResp.Data.DURL) > 0 {
-		result["durl"] = streamResp.Data.DURL
+		mp4Streams := make([]map[string]interface{}, 0)
+		for i, segment := range streamResp.Data.DURL {
+			mp4Streams = append(mp4Streams, map[string]interface{}{
+				"segment": i + 1,
+				"url":     segment.URL,
+				"size":    segment.Size,
+				"length":  segment.Length,
+			})
+		}
+		playUrls["mp4_streams"] = mp4Streams
+
+		// 推荐的合并流（第一个分段）
+		if len(streamResp.Data.DURL) > 0 {
+			playUrls["recommended"] = map[string]interface{}{
+				"merged_url": streamResp.Data.DURL[0].URL,
+				"note":       "MP4格式已合并音视频，可直接播放",
+			}
+		}
+	}
+
+	result["play_urls"] = playUrls
+
+	// 添加使用示例
+	refererURL := fmt.Sprintf("https://www.bilibili.com/video/%s", videoID)
+	result["usage_examples"] = map[string]interface{}{
+		"curl_download": fmt.Sprintf(`curl "播放地址" -H "Referer: %s" -H "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" -o video.mp4`, refererURL),
+		"ffmpeg_play":   fmt.Sprintf(`ffmpeg -user_agent "Mozilla/5.0..." -referer "%s" -i "播放地址" -c copy output.mp4`, refererURL),
 	}
 
 	// 将结果转换为JSON字符串
@@ -942,4 +1196,26 @@ func (s *Server) handleGetVideoStream(ctx context.Context, args map[string]inter
 	}
 
 	return s.createToolResult(string(resultJSON), false)
+}
+
+// getQualityDescription 获取清晰度描述
+func getQualityDescription(quality int) string {
+	qualityMap := map[int]string{
+		16:  "360P",
+		32:  "480P",
+		64:  "720P",
+		74:  "720P60",
+		80:  "1080P",
+		112: "1080P+",
+		116: "1080P60",
+		120: "4K",
+		125: "HDR",
+		126: "杜比视界",
+		127: "8K",
+	}
+
+	if desc, exists := qualityMap[quality]; exists {
+		return desc
+	}
+	return fmt.Sprintf("Q%d", quality)
 }

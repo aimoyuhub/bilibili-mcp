@@ -1,0 +1,187 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # 当推送 v* 标签时触发 (如 v1.0.0)
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # 需要写入权限来创建 release
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整的 git 历史，用于生成版本号
+
+    - name: 设置 Go 环境
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        cache: true
+
+    - name: 验证依赖
+      run: |
+        go mod download
+        go mod verify
+
+    - name: 下载 Whisper 模型
+      run: |
+        echo "📦 下载基础模型文件..."
+        mkdir -p models
+        cd models
+        
+        # 下载 base 模型 (~142MB)
+        if [ ! -f "ggml-base.bin" ]; then
+          echo "⬇️  下载 ggml-base.bin..."
+          curl -L -o ggml-base.bin "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin?download=true"
+          echo "✅ ggml-base.bin 下载完成"
+        fi
+        
+        # 下载 macOS Core ML 模型
+        echo "🚀 下载 macOS Core ML 加速模型..."
+        if [ ! -f "ggml-base.en-encoder.mlmodelc.zip" ]; then
+          echo "⬇️  下载 ggml-base Core ML 模型..."
+          curl -L -o ggml-base.en-encoder.mlmodelc.zip "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en-encoder.mlmodelc.zip?download=true"
+          echo "✅ ggml-base Core ML 模型下载完成"
+        fi
+        
+        # 解压 Core ML 模型
+        if [ -f "ggml-base.en-encoder.mlmodelc.zip" ]; then
+          echo "📂 解压 ggml-base Core ML 模型..."
+          unzip -q ggml-base.en-encoder.mlmodelc.zip
+          rm -f ggml-base.en-encoder.mlmodelc.zip
+          echo "✅ ggml-base Core ML 模型解压完成"
+        fi
+        
+        cd ..
+        echo "🎉 模型下载完成！"
+        ls -la models/
+
+    - name: 运行测试
+      run: go test -v ./...
+
+    - name: 跨平台构建
+      run: |
+        echo "🔨 开始跨平台构建..."
+        make build-all
+
+    - name: 创建分平台发布包
+      run: |
+        echo "📦 创建分平台发布包..."
+        make prepare-models
+        
+        # 手动执行发布打包逻辑（避免依赖 make release）
+        cd dist
+        
+        # macOS Apple Silicon - 包含 Core ML 模型
+        echo "📦 打包 macOS Apple Silicon (包含 Core ML 加速)..."
+        mkdir -p darwin-arm64-package
+        cp bilibili-mcp-darwin-arm64 bilibili-login-darwin-arm64 whisper-init-darwin-arm64 darwin-arm64-package/
+        mkdir -p darwin-arm64-package/models
+        cp ../models/ggml-base.bin darwin-arm64-package/models/
+        if [ -d "../models/ggml-base.en-encoder.mlmodelc" ]; then
+          cp -r ../models/ggml-base.en-encoder.mlmodelc darwin-arm64-package/models/
+        fi
+        tar -czf bilibili-mcp-${GITHUB_REF#refs/tags/}-darwin-arm64.tar.gz -C darwin-arm64-package .
+        rm -rf darwin-arm64-package
+        
+        # macOS Intel - 包含 Core ML 模型
+        echo "📦 打包 macOS Intel (包含 Core ML 加速)..."
+        mkdir -p darwin-amd64-package
+        cp bilibili-mcp-darwin-amd64 bilibili-login-darwin-amd64 whisper-init-darwin-amd64 darwin-amd64-package/
+        mkdir -p darwin-amd64-package/models
+        cp ../models/ggml-base.bin darwin-amd64-package/models/
+        if [ -d "../models/ggml-base.en-encoder.mlmodelc" ]; then
+          cp -r ../models/ggml-base.en-encoder.mlmodelc darwin-amd64-package/models/
+        fi
+        tar -czf bilibili-mcp-${GITHUB_REF#refs/tags/}-darwin-amd64.tar.gz -C darwin-amd64-package .
+        rm -rf darwin-amd64-package
+        
+        # Windows - 仅基础模型
+        echo "📦 打包 Windows (基础模型)..."
+        mkdir -p windows-amd64-package
+        cp bilibili-mcp-windows-amd64.exe bilibili-login-windows-amd64.exe whisper-init-windows-amd64.exe windows-amd64-package/
+        mkdir -p windows-amd64-package/models
+        cp ../models/ggml-base.bin windows-amd64-package/models/
+        zip -r -q bilibili-mcp-${GITHUB_REF#refs/tags/}-windows-amd64.zip windows-amd64-package
+        rm -rf windows-amd64-package
+        
+        # Linux - 仅基础模型
+        echo "📦 打包 Linux (基础模型)..."
+        mkdir -p linux-amd64-package
+        cp bilibili-mcp-linux-amd64 bilibili-login-linux-amd64 whisper-init-linux-amd64 linux-amd64-package/
+        mkdir -p linux-amd64-package/models
+        cp ../models/ggml-base.bin linux-amd64-package/models/
+        tar -czf bilibili-mcp-${GITHUB_REF#refs/tags/}-linux-amd64.tar.gz -C linux-amd64-package .
+        rm -rf linux-amd64-package
+        
+        echo "✅ 发布包创建完成！"
+        echo ""
+        echo "📋 发布包说明:"
+        echo "   macOS: 包含 Core ML 加速模型 (~180MB)"
+        echo "   Windows/Linux: 仅包含基础模型 (~142MB)"
+        echo ""
+        ls -la *.tar.gz *.zip
+
+    - name: 生成校验和文件
+      run: |
+        cd dist
+        echo "🔐 生成校验和文件..."
+        sha256sum *.tar.gz *.zip > SHA256SUMS
+        echo "✅ 校验和文件生成完成"
+        cat SHA256SUMS
+
+    - name: 创建 GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          dist/*.tar.gz
+          dist/*.zip
+          dist/SHA256SUMS
+        name: Release ${{ github.ref_name }}
+        body: |
+          ## 🎉 bilibili-mcp ${{ github.ref_name }}
+          
+          ### 📦 下载说明
+          
+          **macOS 用户** (推荐):
+          - `bilibili-mcp-${{ github.ref_name }}-darwin-arm64.tar.gz` - Apple Silicon (M1/M2/M3/M4) + Core ML 加速
+          - `bilibili-mcp-${{ github.ref_name }}-darwin-amd64.tar.gz` - Intel Mac + Core ML 加速
+          
+          **其他平台**:
+          - `bilibili-mcp-${{ github.ref_name }}-windows-amd64.zip` - Windows x64
+          - `bilibili-mcp-${{ github.ref_name }}-linux-amd64.tar.gz` - Linux x64
+          
+          ### ⚡ 性能优化
+          
+          - **macOS 版本**: 包含 Core ML 加速模型，转录速度提升 2-3 倍
+          - **其他平台**: 使用优化的 CPU 多线程模式
+          - **所有版本**: 预装 base 模型，开箱即用
+          
+          ### 🚀 快速开始
+          
+          1. 下载对应平台的压缩包
+          2. 解压到任意目录
+          3. 运行 `./bilibili-login` 登录 B站账号
+          4. 运行 `./bilibili-mcp` 启动服务
+          5. 在 AI 客户端中配置 MCP 地址: `http://localhost:18666/mcp`
+          
+          ### 🔐 文件校验
+          
+          使用 SHA256SUMS 文件验证下载完整性：
+          ```bash
+          sha256sum -c SHA256SUMS
+          ```
+          
+          ### 📋 更新内容
+          
+          请查看 [提交历史](https://github.com/${{ github.repository }}/commits/${{ github.ref_name }}) 了解详细更改。
+        draft: false
+        prerelease: false
+        generate_release_notes: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

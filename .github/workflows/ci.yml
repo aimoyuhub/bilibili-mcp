@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置 Go 环境
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        cache: true
+
+    - name: 验证依赖
+      run: |
+        go mod download
+        go mod verify
+
+    - name: 代码格式化检查
+      run: |
+        if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+          echo "代码格式不正确，请运行 'go fmt ./...'"
+          gofmt -s -l .
+          exit 1
+        fi
+
+    - name: 运行测试
+      run: go test -v -race -coverprofile=coverage.out ./...
+
+    - name: 上传覆盖率报告
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.out
+        flags: unittests
+        name: codecov-umbrella
+
+    - name: 构建检查
+      run: |
+        echo "检查所有平台是否能正常构建..."
+        GOOS=darwin GOARCH=arm64 go build ./cmd/server
+        GOOS=darwin GOARCH=amd64 go build ./cmd/server  
+        GOOS=windows GOARCH=amd64 go build ./cmd/server
+        GOOS=linux GOARCH=amd64 go build ./cmd/server
+        echo "✅ 所有平台构建检查通过"
+
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+
+    - name: 设置 Go 环境
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+        cache: true
+
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v3
+      with:
+        version: latest
+        args: --timeout=5m

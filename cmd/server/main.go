@@ -107,7 +107,7 @@ func printUsageInfo(cfg *config.Config) {
 	fmt.Println()
 	fmt.Println("2. 在AI客户端中配置MCP:")
 	fmt.Println("   - Cursor: 在项目根目录创建 .cursor/mcp.json")
-	fmt.Println("   - Claude Code: claude mcp add --transport http bilibili-mcp http://localhost:18666/mcp")
+	fmt.Printf("   - Claude Code: claude mcp add --transport http bilibili-mcp http://%s:%s/mcp\n", cfg.Server.Host, cfg.Server.Port)
 	fmt.Println("   - VSCode: 使用MCP插件添加HTTP服务器")
 	fmt.Println()
 	fmt.Println("3. 可用的MCP工具:")

@@ -7,10 +7,12 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
 	"github.com/shirenchuang/bilibili-mcp/internal/bilibili/auth"
+	"github.com/shirenchuang/bilibili-mcp/internal/bilibili/whisper"
 	"github.com/shirenchuang/bilibili-mcp/internal/browser"
 	"github.com/shirenchuang/bilibili-mcp/pkg/config"
 	"github.com/shirenchuang/bilibili-mcp/pkg/logger"
@@ -18,9 +20,11 @@ import (
 
 // Server MCP服务器
 type Server struct {
-	config       *config.Config
-	browserPool  *browser.BrowserPool
-	loginService *auth.LoginService
+	config         *config.Config
+	browserPool    *browser.BrowserPool
+	loginService   *auth.LoginService
+	whisperService *whisper.Service
+	whisperMutex   sync.RWMutex
 }
 
 // NewServer 创建MCP服务器
@@ -208,8 +212,8 @@ func (s *Server) handleToolCall(ctx context.Context, request *JSONRPCRequest) *J
 		result = s.handleSwitchAccount(ctx, toolArgs)
 	case "post_comment":
 		result = s.handlePostComment(ctx, toolArgs)
-	case "post_image_comment":
-		result = s.handlePostImageComment(ctx, toolArgs)
+	// case "post_image_comment":
+	// 	result = s.handlePostImageComment(ctx, toolArgs)
 	case "reply_comment":
 		result = s.handleReplyComment(ctx, toolArgs)
 	case "get_video_info":
@@ -226,8 +230,8 @@ func (s *Server) handleToolCall(ctx context.Context, request *JSONRPCRequest) *J
 		result = s.handleFollowUser(ctx, toolArgs)
 	case "get_user_videos":
 		result = s.handleGetUserVideos(ctx, toolArgs)
-	case "transcribe_video":
-		result = s.handleTranscribeVideo(ctx, toolArgs)
+	case "whisper_audio_2_text":
+		result = s.handleWhisperAudio2Text(ctx, toolArgs)
 	case "get_video_stream":
 		result = s.handleGetVideoStream(ctx, toolArgs)
 	default:
@@ -312,4 +316,31 @@ func (s *Server) validateVideoID(videoID string) error {
 	}
 
 	return nil
+}
+
+// getOrCreateWhisperService 获取或创建Whisper服务
+func (s *Server) getOrCreateWhisperService() (*whisper.Service, error) {
+	s.whisperMutex.RLock()
+	if s.whisperService != nil {
+		s.whisperMutex.RUnlock()
+		return s.whisperService, nil
+	}
+	s.whisperMutex.RUnlock()
+
+	s.whisperMutex.Lock()
+	defer s.whisperMutex.Unlock()
+
+	// 再次检查（双重检查锁定）
+	if s.whisperService != nil {
+		return s.whisperService, nil
+	}
+
+	// 创建新的Whisper服务，传递完整配置
+	service, err := whisper.NewService(s.config)
+	if err != nil {
+		return nil, err
+	}
+
+	s.whisperService = service
+	return s.whisperService, nil
 }

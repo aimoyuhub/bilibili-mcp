@@ -63,32 +63,33 @@ func GetMCPTools() []MCPTool {
 				"required": []string{"video_id", "content"},
 			},
 		},
-		{
-			Name:        "post_image_comment",
-			Description: "发表图片评论到视频",
-			InputSchema: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"video_id": map[string]interface{}{
-						"type":        "string",
-						"description": "视频BV号或AV号",
-					},
-					"content": map[string]interface{}{
-						"type":        "string",
-						"description": "评论文字内容",
-					},
-					"image_path": map[string]interface{}{
-						"type":        "string",
-						"description": "本地图片文件路径",
-					},
-					"account_name": map[string]interface{}{
-						"type":        "string",
-						"description": "指定使用的账号名称（可选）",
-					},
-				},
-				"required": []string{"video_id", "content", "image_path"},
-			},
-		},
+		// 暂时注释 - post_image_comment 功能暂不提供
+		// {
+		// 	Name:        "post_image_comment",
+		// 	Description: "发表图片评论到视频",
+		// 	InputSchema: map[string]interface{}{
+		// 		"type": "object",
+		// 		"properties": map[string]interface{}{
+		// 			"video_id": map[string]interface{}{
+		// 				"type":        "string",
+		// 				"description": "视频BV号或AV号",
+		// 			},
+		// 			"content": map[string]interface{}{
+		// 				"type":        "string",
+		// 				"description": "评论文字内容",
+		// 			},
+		// 			"image_path": map[string]interface{}{
+		// 				"type":        "string",
+		// 				"description": "本地图片文件路径",
+		// 			},
+		// 			"account_name": map[string]interface{}{
+		// 				"type":        "string",
+		// 				"description": "指定使用的账号名称（可选）",
+		// 			},
+		// 		},
+		// 		"required": []string{"video_id", "content", "image_path"},
+		// 	},
+		// },
 		{
 			Name:        "reply_comment",
 			Description: "回复评论",
@@ -198,7 +199,7 @@ func GetMCPTools() []MCPTool {
 		},
 		{
 			Name:        "download_media",
-			Description: "下载B站视频的媒体文件，支持音频、视频或合并文件下载，支持多种清晰度选择",
+			Description: "智能下载B站视频媒体文件，优先下载包含音频的完整视频，仅在高清视频时使用音视频分离格式。支持实时进度显示和多种清晰度选择",
 			InputSchema: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -279,31 +280,37 @@ func GetMCPTools() []MCPTool {
 			},
 		},
 
-		// 可选功能
+		// 可选功能 - Whisper音频转录
 		{
-			Name:        "transcribe_video",
-			Description: "提取视频音频并转录为文字（需要安装Whisper）",
+			Name:        "whisper_audio_2_text",
+			Description: "使用Whisper.cpp将音频文件转录为文字。支持多种音频格式，自动转换为最适合的格式进行识别。需要先运行 ./bilibili-whisper-init 进行初始化",
 			InputSchema: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"video_id": map[string]interface{}{
+					"audio_path": map[string]interface{}{
 						"type":        "string",
-						"description": "视频BV号或AV号",
+						"description": "音频文件路径（支持mp3, wav, m4a, flac等格式）",
 					},
 					"language": map[string]interface{}{
 						"type":        "string",
-						"description": "语言代码（zh, en等）",
+						"description": "识别语言代码：zh=中文, en=英文, ja=日语, auto=自动检测",
 						"default":     "zh",
 					},
+					"model": map[string]interface{}{
+						"type":        "string",
+						"description": "使用的模型（建议不传此参数，系统会自动选择最佳可用模型）。可选值：auto=智能选择最佳, tiny=最快, base=平衡, small=推荐, medium=高质量, large=最佳。如果指定模型不存在，会自动降级到可用的最佳模型",
+						"enum":        []string{"auto", "tiny", "base", "small", "medium", "large"},
+						"default":     "auto",
+					},
 				},
-				"required": []string{"video_id"},
+				"required": []string{"audio_path"},
 			},
 		},
 
 		// 视频流相关
 		{
 			Name:        "get_video_stream",
-			Description: "获取视频流地址，支持MP4和DASH格式。使用步骤：1)先调用get_video_info获取CID 2)用获取的CID调用此工具",
+			Description: "获取视频播放地址，直接返回可用的音频和视频流URL。只需提供视频ID即可，会自动获取第一个分P的播放地址",
 			InputSchema: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -313,7 +320,7 @@ func GetMCPTools() []MCPTool {
 					},
 					"cid": map[string]interface{}{
 						"type":        "number",
-						"description": "视频分P的CID，必须先用get_video_info获取。每个分P都有唯一CID，不能为0",
+						"description": "视频分P的CID（可选，不指定则自动获取第一个分P）",
 					},
 					"quality": map[string]interface{}{
 						"type":        "number",
@@ -332,7 +339,7 @@ func GetMCPTools() []MCPTool {
 						"description": "指定使用的账号名称（可选，登录后可获取更高清晰度）",
 					},
 				},
-				"required": []string{"video_id", "cid"},
+				"required": []string{"video_id"},
 			},
 		},
 	}

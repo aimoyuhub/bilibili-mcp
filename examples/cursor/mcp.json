@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "bilibili-mcp": {
-      "url": "http://localhost:18060/mcp",
+      "url": "http://localhost:18666/mcp",
       "description": "B站内容操作服务 - MCP Streamable HTTP"
     }
   }

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/pkg/errors"
@@ -28,6 +29,117 @@ const (
 	MediaTypeMerged MediaType = "merged" // 音视频合并
 )
 
+// ProgressTracker 进度跟踪器
+type ProgressTracker struct {
+	filename   string
+	totalSize  int64
+	downloaded int64
+	startTime  time.Time
+	lastUpdate time.Time
+	lastLogged int64
+}
+
+// NewProgressTracker 创建进度跟踪器
+func NewProgressTracker(filename string, totalSize int64) *ProgressTracker {
+	now := time.Now()
+	return &ProgressTracker{
+		filename:   filename,
+		totalSize:  totalSize,
+		downloaded: 0,
+		startTime:  now,
+		lastUpdate: now,
+		lastLogged: 0,
+	}
+}
+
+// Update 更新进度并输出日志
+func (p *ProgressTracker) Update(downloaded int64) {
+	atomic.StoreInt64(&p.downloaded, downloaded)
+	now := time.Now()
+
+	// 每2秒或进度变化超过5%时输出一次日志
+	progressPercent := float64(downloaded) * 100 / float64(p.totalSize)
+	lastProgressPercent := float64(p.lastLogged) * 100 / float64(p.totalSize)
+
+	if now.Sub(p.lastUpdate) >= 2*time.Second || progressPercent-lastProgressPercent >= 5 {
+		p.logProgress(downloaded, now)
+		p.lastUpdate = now
+		p.lastLogged = downloaded
+	}
+}
+
+// logProgress 输出进度日志
+func (p *ProgressTracker) logProgress(downloaded int64, now time.Time) {
+	if p.totalSize <= 0 {
+		// 未知文件大小
+		elapsed := now.Sub(p.startTime)
+		speed := float64(downloaded) / elapsed.Seconds()
+		logger.Infof("[下载进度] %s: 已下载 %.2f MB, 速度: %.2f MB/s, 用时: %v",
+			p.filename,
+			float64(downloaded)/(1024*1024),
+			speed/(1024*1024),
+			elapsed.Round(time.Second))
+	} else {
+		// 已知文件大小
+		progressPercent := float64(downloaded) * 100 / float64(p.totalSize)
+		elapsed := now.Sub(p.startTime)
+		speed := float64(downloaded) / elapsed.Seconds()
+
+		// 预估剩余时间
+		remaining := time.Duration(0)
+		if speed > 0 {
+			remainingBytes := p.totalSize - downloaded
+			remaining = time.Duration(float64(remainingBytes)/speed) * time.Second
+		}
+
+		logger.Infof("[下载进度] %s: %.1f%% (%.2f/%.2f MB), 速度: %.2f MB/s, 剩余时间: %v",
+			p.filename,
+			progressPercent,
+			float64(downloaded)/(1024*1024),
+			float64(p.totalSize)/(1024*1024),
+			speed/(1024*1024),
+			remaining.Round(time.Second))
+	}
+}
+
+// Finish 完成下载时的日志
+func (p *ProgressTracker) Finish(downloaded int64) {
+	elapsed := time.Since(p.startTime)
+	avgSpeed := float64(downloaded) / elapsed.Seconds()
+
+	logger.Infof("[下载完成] %s: %.2f MB, 平均速度: %.2f MB/s, 总用时: %v",
+		p.filename,
+		float64(downloaded)/(1024*1024),
+		avgSpeed/(1024*1024),
+		elapsed.Round(time.Second))
+}
+
+// ProgressReader 带进度跟踪的Reader
+type ProgressReader struct {
+	reader  io.Reader
+	tracker *ProgressTracker
+	total   int64
+}
+
+// NewProgressReader 创建带进度跟踪的Reader
+func NewProgressReader(reader io.Reader, tracker *ProgressTracker) *ProgressReader {
+	return &ProgressReader{
+		reader:  reader,
+		tracker: tracker,
+		total:   0,
+	}
+}
+
+// Read 实现io.Reader接口，同时跟踪进度
+func (pr *ProgressReader) Read(p []byte) (int, error) {
+	n, err := pr.reader.Read(p)
+	if n > 0 {
+		pr.total += int64(n)
+		pr.tracker.Update(pr.total)
+	}
+	return n, err
+}
+
 // MediaDownloadService 媒体下载服务
 type MediaDownloadService struct {
 	apiClient *api.Client
@@ -40,6 +152,16 @@ func NewMediaDownloadService(apiClient *api.Client, outputDir string) *MediaDown
 		apiClient: apiClient,
 		outputDir: outputDir,
 	}
+}
+
+// QualityInfo 清晰度信息
+type QualityInfo struct {
+	Quality     int    `json:"quality"`     // 清晰度代码
+	Description string `json:"description"` // 清晰度描述
+	Width       int    `json:"width"`       // 宽度
+	Height      int    `json:"height"`      // 高度
+	HasAudio    bool   `json:"has_audio"`   // 是否包含音频
+	Available   bool   `json:"available"`   // 是否可用
 }
 
 // MediaDownloadResult 媒体下载结果
@@ -65,6 +187,10 @@ type MediaDownloadResult struct {
 	AudioURL string `json:"audio_url,omitempty"` // 音频流地址
 	VideoURL string `json:"video_url,omitempty"` // 视频流地址
 
+	// 清晰度信息
+	CurrentQuality     QualityInfo   `json:"current_quality"`     // 当前下载的清晰度信息
+	AvailableQualities []QualityInfo `json:"available_qualities"` // 所有可用清晰度
+
 	// 提示信息
 	MergeRequired bool   `json:"merge_required"`          // 是否需要合并
 	MergeCommand  string `json:"merge_command,omitempty"` // 合并命令
@@ -80,10 +206,11 @@ type DownloadOptions struct {
 
 // DownloadMedia 下载媒体文件
 func (s *MediaDownloadService) DownloadMedia(ctx context.Context, videoID string, opts DownloadOptions) (*MediaDownloadResult, error) {
-	logger.Infof("开始下载媒体 - 视频ID: %s, 类型: %s, 清晰度: %d, CID: %d",
+	logger.Infof("🚀 开始下载媒体 - 视频ID: %s, 类型: %s, 清晰度: %d, CID: %d",
 		videoID, opts.MediaType, opts.Quality, opts.CID)
 
 	// 获取视频信息
+	logger.Infof("📋 正在获取视频信息...")
 	videoInfo, err := s.apiClient.GetVideoInfo(videoID)
 	if err != nil {
 		return nil, errors.Wrap(err, "获取视频信息失败")
@@ -92,6 +219,8 @@ func (s *MediaDownloadService) DownloadMedia(ctx context.Context, videoID string
 	if videoInfo.Code != 0 {
 		return nil, errors.Errorf("获取视频信息失败: %s (code: %d)", videoInfo.Message, videoInfo.Code)
 	}
+
+	logger.Infof("✅ 视频信息获取成功: %s", videoInfo.Data.Title)
 
 	// 如果没有指定CID，使用第一个分P的CID
 	cid := opts.CID
@@ -103,62 +232,71 @@ func (s *MediaDownloadService) DownloadMedia(ctx context.Context, videoID string
 		return nil, errors.New("无法获取视频CID")
 	}
 
-	// 首先尝试使用GetPlayUrl（兼容性更好）
-	playUrlResp, err := s.apiClient.GetPlayUrl(videoID)
-	if err != nil {
-		return nil, errors.Wrap(err, "获取播放地址失败")
-	}
+	logger.Infof("🔗 正在获取播放地址...")
 
-	if playUrlResp.Code != 0 {
-		return nil, errors.Errorf("获取播放地址失败: %s (code: %d)", playUrlResp.Message, playUrlResp.Code)
-	}
-
-	// 检查是否需要特定清晰度，如果需要，使用GetVideoStream
+	// 智能选择下载策略
 	var streamData *VideoStreamData
-	currentQuality := getQualityFromVideo(playUrlResp.Data.Dash.Video)
-	if opts.Quality > 0 && opts.Quality != currentQuality {
-		// 使用GetVideoStream获取指定清晰度
-		quality := opts.Quality
-		fnval := 16 // DASH格式
-		if opts.MediaType == MediaTypeMerged {
-			fnval = 1 // MP4格式，已合并
+	var currentQuality QualityInfo
+	var availableQualities []QualityInfo
+
+	if opts.MediaType == MediaTypeMerged {
+		// 对于合并类型，优先尝试获取包含音频的完整视频
+		streamResult, err := s.getOptimalStream(videoID, cid, opts.Quality)
+		if err != nil {
+			return nil, errors.Wrap(err, "获取播放地址失败")
+		}
+		streamData = streamResult.StreamData
+		currentQuality = streamResult.CurrentQuality
+		availableQualities = streamResult.AvailableQualities
+	} else {
+		// 对于单独的音频或视频，使用DASH格式
+		playUrlResp, err := s.apiClient.GetPlayUrl(videoID)
+		if err != nil {
+			return nil, errors.Wrap(err, "获取播放地址失败")
+		}
+		if playUrlResp.Code != 0 {
+			return nil, errors.Errorf("获取播放地址失败: %s (code: %d)", playUrlResp.Message, playUrlResp.Code)
+		}
+		streamData = convertPlayUrlToStreamData(playUrlResp)
+
+		// 为单独的音频或视频创建简单的质量信息
+		currentQuality = QualityInfo{
+			Quality:     streamData.Quality,
+			Description: getQualityDescription(streamData.Quality),
+			HasAudio:    false, // DASH格式音视频分离
+			Available:   true,
 		}
 
-		streamResp, err := s.apiClient.GetVideoStream(videoID, cid, quality, fnval, "html5")
-		if err != nil {
-			// 如果GetVideoStream失败，回退到GetPlayUrl的结果
-			logger.Warnf("GetVideoStream失败，回退到GetPlayUrl: %v", err)
-			streamData = convertPlayUrlToStreamData(playUrlResp)
-		} else if streamResp.Code != 0 {
-			logger.Warnf("GetVideoStream返回错误，回退到GetPlayUrl: %s (code: %d)", streamResp.Message, streamResp.Code)
-			streamData = convertPlayUrlToStreamData(playUrlResp)
-		} else {
-			streamData = streamResp.Data
-		}
-	} else {
-		// 使用GetPlayUrl的结果
-		streamData = convertPlayUrlToStreamData(playUrlResp)
+		// 尝试获取可用清晰度信息
+		availableQualities, _ = s.getAvailableQualities(videoID, cid)
 	}
+
+	logger.Infof("✅ 播放地址获取成功")
 
 	// 创建结果对象
 	result := &MediaDownloadResult{
-		VideoID:     videoID,
-		Title:       videoInfo.Data.Title,
-		MediaType:   opts.MediaType,
-		Quality:     streamData.Quality,
-		QualityDesc: getQualityDescription(streamData.Quality),
-		Duration:    int(streamData.TimeLength / 1000), // 转换为秒
+		VideoID:            videoID,
+		Title:              videoInfo.Data.Title,
+		MediaType:          opts.MediaType,
+		Quality:            streamData.Quality,
+		QualityDesc:        getQualityDescription(streamData.Quality),
+		Duration:           int(streamData.TimeLength / 1000), // 转换为秒
+		CurrentQuality:     currentQuality,
+		AvailableQualities: availableQualities,
 	}
 
 	// 确保输出目录存在
+	logger.Infof("📁 准备输出目录: %s", s.outputDir)
 	if err := os.MkdirAll(s.outputDir, 0755); err != nil {
 		return nil, errors.Wrap(err, "创建输出目录失败")
 	}
 
 	// 清理文件名
 	cleanTitle := sanitizeFilename(videoInfo.Data.Title)
+	logger.Infof("📝 处理文件名: %s -> %s", videoInfo.Data.Title, cleanTitle)
 
 	// 根据媒体类型下载
+	logger.Infof("⬇️ 开始下载 %s 类型的媒体文件...", opts.MediaType)
 	switch opts.MediaType {
 	case MediaTypeAudio:
 		return s.downloadAudioOnly(ctx, result, streamData, cleanTitle)
@@ -177,6 +315,7 @@ func (s *MediaDownloadService) downloadAudioOnly(ctx context.Context, result *Me
 		return nil, errors.New("该视频没有可用的音频流")
 	}
 
+	logger.Infof("🎵 选择最佳音频流...")
 	// 选择最佳音频流
 	bestAudio := streamData.DASH.Audio[0]
 	for _, audio := range streamData.DASH.Audio {
@@ -184,6 +323,7 @@ func (s *MediaDownloadService) downloadAudioOnly(ctx context.Context, result *Me
 			bestAudio = audio
 		}
 	}
+	logger.Infof("✅ 已选择音频流: 带宽 %d kbps", bestAudio.Bandwidth/1000)
 
 	// 生成文件路径
 	filename := fmt.Sprintf("%s_%s_audio.m4a", cleanTitle, result.VideoID)
@@ -294,6 +434,7 @@ func (s *MediaDownloadService) downloadAndMerge(ctx context.Context, result *Med
 		return nil, errors.New("该视频缺少音频或视频流")
 	}
 
+	logger.Infof("🎯 选择最佳音视频流...")
 	// 选择最佳音频流
 	bestAudio := streamData.DASH.Audio[0]
 	for _, audio := range streamData.DASH.Audio {
@@ -313,6 +454,9 @@ func (s *MediaDownloadService) downloadAndMerge(ctx context.Context, result *Med
 	if bestVideo == nil {
 		bestVideo = &streamData.DASH.Video[0]
 	}
+
+	logger.Infof("✅ 已选择流: 音频带宽 %d kbps, 视频 %s (%dx%d)",
+		bestAudio.Bandwidth/1000, result.QualityDesc, bestVideo.Width, bestVideo.Height)
 
 	// 生成文件路径
 	audioFilename := fmt.Sprintf("%s_%s_audio.m4a", cleanTitle, result.VideoID)
@@ -344,33 +488,33 @@ func (s *MediaDownloadService) downloadAndMerge(ctx context.Context, result *Med
 	}
 
 	// 下载音频
+	logger.Infof("🎵 开始处理音频文件...")
 	audioExists := false
 	if fileInfo, err := os.Stat(absAudioPath); err == nil {
 		result.AudioSize = fileInfo.Size()
 		audioExists = true
-		logger.Infof("音频文件已存在: %s", absAudioPath)
+		logger.Infof("✅ 音频文件已存在: %s (%.2f MB)", filepath.Base(absAudioPath), float64(fileInfo.Size())/(1024*1024))
 	} else {
 		audioSize, err := s.downloadStream(ctx, bestAudio.BaseURL, absAudioPath, result.VideoID)
 		if err != nil {
 			return nil, errors.Wrap(err, "下载音频失败")
 		}
 		result.AudioSize = audioSize
-		logger.Infof("音频下载完成: %s (大小: %.2f MB)", absAudioPath, float64(audioSize)/(1024*1024))
 	}
 
 	// 下载视频
+	logger.Infof("🎬 开始处理视频文件...")
 	videoExists := false
 	if fileInfo, err := os.Stat(absVideoPath); err == nil {
 		result.VideoSize = fileInfo.Size()
 		videoExists = true
-		logger.Infof("视频文件已存在: %s", absVideoPath)
+		logger.Infof("✅ 视频文件已存在: %s (%.2f MB)", filepath.Base(absVideoPath), float64(fileInfo.Size())/(1024*1024))
 	} else {
 		videoSize, err := s.downloadStream(ctx, bestVideo.BaseURL, absVideoPath, result.VideoID)
 		if err != nil {
 			return nil, errors.Wrap(err, "下载视频失败")
 		}
 		result.VideoSize = videoSize
-		logger.Infof("视频下载完成: %s (大小: %.2f MB)", absVideoPath, float64(videoSize)/(1024*1024))
 	}
 
 	// 生成合并命令
@@ -472,22 +616,31 @@ func (s *MediaDownloadService) downloadStream(ctx context.Context, streamURL, ou
 	}
 	defer tempFile.Close()
 
-	// 获取文件大小用于进度显示
+	// 获取文件大小和文件名
 	contentLength := resp.ContentLength
+	filename := filepath.Base(outputPath)
+
+	// 创建进度跟踪器
+	tracker := NewProgressTracker(filename, contentLength)
+
 	if contentLength > 0 {
-		logger.Infof("开始下载文件，大小: %.2f MB", float64(contentLength)/(1024*1024))
+		logger.Infof("[开始下载] %s: 文件大小 %.2f MB", filename, float64(contentLength)/(1024*1024))
 	} else {
-		logger.Infof("开始下载文件，大小未知")
+		logger.Infof("[开始下载] %s: 文件大小未知", filename)
 	}
 
-	// 复制数据
-	written, err := io.Copy(tempFile, resp.Body)
+	// 创建带进度跟踪的Reader
+	progressReader := NewProgressReader(resp.Body, tracker)
+
+	// 复制数据，同时跟踪进度
+	written, err := io.Copy(tempFile, progressReader)
 	if err != nil {
 		os.Remove(tempPath)
 		return 0, errors.Wrap(err, "下载数据失败")
 	}
 
-	logger.Infof("文件下载完成，实际大小: %.2f MB", float64(written)/(1024*1024))
+	// 输出完成日志
+	tracker.Finish(written)
 
 	tempFile.Close()
 
@@ -498,6 +651,203 @@ func (s *MediaDownloadService) downloadStream(ctx context.Context, streamURL, ou
 	}
 
 	return written, nil
+}
+
+// StreamResult 流获取结果
+type StreamResult struct {
+	StreamData         *VideoStreamData
+	CurrentQuality     QualityInfo
+	AvailableQualities []QualityInfo
+}
+
+// getOptimalStream 获取最优的视频流，优先尝试包含音频的完整视频
+func (s *MediaDownloadService) getOptimalStream(videoID string, cid int64, preferredQuality int) (*StreamResult, error) {
+	logger.Infof("🎯 分析可用清晰度和最优下载策略...")
+
+	// 1. 先获取所有可用的清晰度信息
+	availableQualities, err := s.getAvailableQualities(videoID, cid)
+	if err != nil {
+		logger.Warnf("获取可用清晰度失败，使用默认策略: %v", err)
+		availableQualities = []QualityInfo{}
+	}
+
+	// 2. 尝试获取包含音频的完整视频（MP4格式）
+	logger.Infof("🎯 尝试获取包含音频的完整视频...")
+
+	// 根据用户需求选择尝试的清晰度顺序
+	var qualities []int
+	if preferredQuality > 0 {
+		if preferredQuality >= 80 {
+			qualities = []int{preferredQuality, 80, 64, 32, 16}
+		} else {
+			qualities = []int{preferredQuality, 64, 32, 16}
+		}
+	} else {
+		qualities = []int{64, 32, 16} // 默认优先尝试标清完整视频
+	}
+
+	// 尝试MP4格式
+	for _, quality := range qualities {
+		streamResp, err := s.apiClient.GetVideoStream(videoID, cid, quality, 1, "html5")
+		if err != nil {
+			continue
+		}
+		if streamResp.Code != 0 {
+			continue
+		}
+		if len(streamResp.Data.DURL) > 0 {
+			logger.Infof("✅ 找到包含音频的完整视频: %s", getQualityDescription(quality))
+
+			// 构建当前清晰度信息
+			currentQuality := QualityInfo{
+				Quality:     quality,
+				Description: getQualityDescription(quality),
+				HasAudio:    true,
+				Available:   true,
+			}
+
+			return &StreamResult{
+				StreamData:         streamResp.Data,
+				CurrentQuality:     currentQuality,
+				AvailableQualities: availableQualities,
+			}, nil
+		}
+	}
+
+	// 3. 如果没有找到MP4格式，使用DASH格式（音视频分离）
+	logger.Infof("⚠️  未找到包含音频的完整视频，使用音视频分离格式")
+
+	targetQuality := preferredQuality
+	if targetQuality == 0 {
+		targetQuality = 80 // 默认1080P
+	}
+
+	streamResp, err := s.apiClient.GetVideoStream(videoID, cid, targetQuality, 16, "html5")
+	if err != nil {
+		// 回退到GetPlayUrl
+		return s.fallbackToPlayUrl(videoID, availableQualities)
+	}
+
+	if streamResp.Code != 0 {
+		// 回退到GetPlayUrl
+		return s.fallbackToPlayUrl(videoID, availableQualities)
+	}
+
+	// 从DASH数据中获取实际清晰度信息
+	actualQuality := targetQuality
+	width, height := 0, 0
+	if streamResp.Data.DASH != nil && len(streamResp.Data.DASH.Video) > 0 {
+		video := streamResp.Data.DASH.Video[0]
+		actualQuality = video.ID
+		width = video.Width
+		height = video.Height
+	}
+
+	currentQuality := QualityInfo{
+		Quality:     actualQuality,
+		Description: getQualityDescription(actualQuality),
+		Width:       width,
+		Height:      height,
+		HasAudio:    false, // DASH格式音视频分离
+		Available:   true,
+	}
+
+	return &StreamResult{
+		StreamData:         streamResp.Data,
+		CurrentQuality:     currentQuality,
+		AvailableQualities: availableQualities,
+	}, nil
+}
+
+// fallbackToPlayUrl 回退到GetPlayUrl
+func (s *MediaDownloadService) fallbackToPlayUrl(videoID string, availableQualities []QualityInfo) (*StreamResult, error) {
+	logger.Warnf("回退到GetPlayUrl")
+	playUrlResp, err := s.apiClient.GetPlayUrl(videoID)
+	if err != nil {
+		return nil, errors.Wrap(err, "获取播放地址失败")
+	}
+	if playUrlResp.Code != 0 {
+		return nil, errors.Errorf("获取播放地址失败: %s (code: %d)", playUrlResp.Message, playUrlResp.Code)
+	}
+
+	streamData := convertPlayUrlToStreamData(playUrlResp)
+	currentQuality := QualityInfo{
+		Quality:     streamData.Quality,
+		Description: getQualityDescription(streamData.Quality),
+		HasAudio:    false, // PlayUrl通常返回DASH格式
+		Available:   true,
+	}
+
+	return &StreamResult{
+		StreamData:         streamData,
+		CurrentQuality:     currentQuality,
+		AvailableQualities: availableQualities,
+	}, nil
+}
+
+// getAvailableQualities 获取所有可用的清晰度信息（简化版，避免过多请求）
+func (s *MediaDownloadService) getAvailableQualities(videoID string, cid int64) ([]QualityInfo, error) {
+	var qualities []QualityInfo
+
+	// 首先尝试获取DASH格式信息，这通常包含所有可用清晰度
+	dashResp, err := s.apiClient.GetVideoStream(videoID, cid, 80, 16, "html5")
+	if err == nil && dashResp.Code == 0 && dashResp.Data.DASH != nil {
+		// 从DASH响应中提取可用的清晰度
+		videoStreams := dashResp.Data.DASH.Video
+		qualityMap := make(map[int]QualityInfo)
+
+		for _, video := range videoStreams {
+			qualityMap[video.ID] = QualityInfo{
+				Quality:     video.ID,
+				Description: getQualityDescription(video.ID),
+				Width:       video.Width,
+				Height:      video.Height,
+				HasAudio:    false, // DASH格式音视频分离
+				Available:   true,
+			}
+		}
+
+		// 测试几个常见清晰度的MP4格式（包含音频）
+		testMP4Qualities := []int{64, 32, 16} // 只测试标清，因为高清很少有MP4
+		for _, quality := range testMP4Qualities {
+			mp4Resp, err := s.apiClient.GetVideoStream(videoID, cid, quality, 1, "html5")
+			if err == nil && mp4Resp.Code == 0 && len(mp4Resp.Data.DURL) > 0 {
+				// 更新或添加MP4格式信息
+				if existing, exists := qualityMap[quality]; exists {
+					existing.HasAudio = true
+					qualityMap[quality] = existing
+				} else {
+					qualityMap[quality] = QualityInfo{
+						Quality:     quality,
+						Description: getQualityDescription(quality),
+						HasAudio:    true,
+						Available:   true,
+					}
+				}
+			}
+		}
+
+		// 转换为切片并排序
+		for _, quality := range []int{127, 125, 120, 116, 112, 80, 74, 64, 32, 16} {
+			if info, exists := qualityMap[quality]; exists {
+				qualities = append(qualities, info)
+			}
+		}
+	} else {
+		// 如果无法获取DASH信息，返回基本的清晰度列表
+		logger.Warnf("无法获取详细清晰度信息，使用基本列表")
+		basicQualities := []int{80, 64, 32, 16}
+		for _, quality := range basicQualities {
+			qualities = append(qualities, QualityInfo{
+				Quality:     quality,
+				Description: getQualityDescription(quality),
+				HasAudio:    quality <= 64, // 假设标清有完整视频
+				Available:   true,
+			})
+		}
+	}
+
+	return qualities, nil
 }
 
 // getQualityDescription 获取清晰度描述

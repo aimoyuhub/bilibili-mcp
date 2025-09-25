@@ -1,7 +1,7 @@
 {
   "servers": {
     "bilibili-mcp": {
-      "url": "http://localhost:18060/mcp",
+      "url": "http://localhost:18666/mcp",
       "type": "http"
     }
   },

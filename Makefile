@@ -3,6 +3,7 @@
 # 变量定义
 APP_NAME=bilibili-mcp
 LOGIN_NAME=bilibili-login
+WHISPER_INIT_NAME=whisper-init
 VERSION=$(shell git describe --tags --always --dirty)
 BUILD_TIME=$(shell date -u '+%Y-%m-%d_%H:%M:%S')
 GO_VERSION=$(shell go version | awk '{print $$3}')
@@ -16,7 +17,7 @@ all: build
 
 # 构建
 .PHONY: build
-build: build-server build-login
+build: build-server build-login build-whisper-init
 
 .PHONY: build-server
 build-server:
@@ -28,6 +29,11 @@ build-login:
 	@echo "构建登录工具..."
 	go build $(LDFLAGS) -o $(LOGIN_NAME) ./cmd/login
 
+.PHONY: build-whisper-init
+build-whisper-init:
+	@echo "构建 Whisper 初始化工具..."
+	go build $(LDFLAGS) -o $(WHISPER_INIT_NAME) ./cmd/whisper-init
+
 # 跨平台构建
 .PHONY: build-all
 build-all: clean
@@ -36,21 +42,49 @@ build-all: clean
 	# macOS Apple Silicon
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o dist/$(APP_NAME)-darwin-arm64 ./cmd/server
 	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o dist/$(LOGIN_NAME)-darwin-arm64 ./cmd/login
+	GOOS=darwin GOARCH=arm64 go build $(LDFLAGS) -o dist/$(WHISPER_INIT_NAME)-darwin-arm64 ./cmd/whisper-init
 	
 	# macOS Intel
 	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o dist/$(APP_NAME)-darwin-amd64 ./cmd/server
 	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o dist/$(LOGIN_NAME)-darwin-amd64 ./cmd/login
+	GOOS=darwin GOARCH=amd64 go build $(LDFLAGS) -o dist/$(WHISPER_INIT_NAME)-darwin-amd64 ./cmd/whisper-init
 	
 	# Windows x64
 	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o dist/$(APP_NAME)-windows-amd64.exe ./cmd/server
 	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o dist/$(LOGIN_NAME)-windows-amd64.exe ./cmd/login
+	GOOS=windows GOARCH=amd64 go build $(LDFLAGS) -o dist/$(WHISPER_INIT_NAME)-windows-amd64.exe ./cmd/whisper-init
 	
 	# Linux x64
 	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o dist/$(APP_NAME)-linux-amd64 ./cmd/server
 	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o dist/$(LOGIN_NAME)-linux-amd64 ./cmd/login
+	GOOS=linux GOARCH=amd64 go build $(LDFLAGS) -o dist/$(WHISPER_INIT_NAME)-linux-amd64 ./cmd/whisper-init
 	
 	@echo "跨平台构建完成！"
 	@ls -la dist/
+
+# 准备模型文件
+.PHONY: prepare-models
+prepare-models:
+	@echo "检查模型文件..."
+	@if [ ! -f "models/ggml-base.bin" ]; then \
+		echo "❌ 未找到 ggml-base.bin 模型文件"; \
+		echo "💡 请运行以下命令下载模型:"; \
+		echo "   ./scripts/download-whisper-models.sh"; \
+		echo "   或者: make download-models"; \
+		exit 1; \
+	fi
+	@echo "✅ 基础模型文件检查完成"
+	@if [ -d "models/ggml-base.en-encoder.mlmodelc" ]; then \
+		echo "✅ 找到 Core ML 加速模型"; \
+	else \
+		echo "⚠️  未找到 Core ML 模型，macOS 版本将不包含 Core ML 加速"; \
+	fi
+
+# 下载模型文件
+.PHONY: download-models
+download-models:
+	@echo "下载 Whisper 模型文件..."
+	./scripts/download-whisper-models.sh
 
 # 安装依赖
 .PHONY: deps
@@ -87,22 +121,68 @@ lint:
 .PHONY: clean
 clean:
 	@echo "清理构建文件..."
-	rm -f $(APP_NAME) $(LOGIN_NAME)
+	rm -f $(APP_NAME) $(LOGIN_NAME) $(WHISPER_INIT_NAME)
 	rm -rf dist/
 	rm -rf logs/
 	mkdir -p dist
 
 # 创建发布包
 .PHONY: release
-release: build-all
-	@echo "创建发布包..."
-	cd dist && \
-	tar -czf $(APP_NAME)-v$(VERSION)-darwin-arm64.tar.gz $(APP_NAME)-darwin-arm64 $(LOGIN_NAME)-darwin-arm64 && \
-	tar -czf $(APP_NAME)-v$(VERSION)-darwin-amd64.tar.gz $(APP_NAME)-darwin-amd64 $(LOGIN_NAME)-darwin-amd64 && \
-	zip -q $(APP_NAME)-v$(VERSION)-windows-amd64.zip $(APP_NAME)-windows-amd64.exe $(LOGIN_NAME)-windows-amd64.exe && \
-	tar -czf $(APP_NAME)-v$(VERSION)-linux-amd64.tar.gz $(APP_NAME)-linux-amd64 $(LOGIN_NAME)-linux-amd64
+release: build-all prepare-models
+	@echo "创建分平台发布包..."
 	
-	@echo "发布包创建完成！"
+	# macOS Apple Silicon - 包含 Core ML 模型
+	@echo "📦 打包 macOS Apple Silicon (包含 Core ML 加速)..."
+	cd dist && \
+	mkdir -p darwin-arm64-package && \
+	cp $(APP_NAME)-darwin-arm64 $(LOGIN_NAME)-darwin-arm64 $(WHISPER_INIT_NAME)-darwin-arm64 darwin-arm64-package/ && \
+	mkdir -p darwin-arm64-package/models && \
+	cp ../models/ggml-base.bin darwin-arm64-package/models/ && \
+	if [ -d "../models/ggml-base.en-encoder.mlmodelc" ]; then \
+		cp -r ../models/ggml-base.en-encoder.mlmodelc darwin-arm64-package/models/; \
+	fi && \
+	tar -czf $(APP_NAME)-v$(VERSION)-darwin-arm64.tar.gz -C darwin-arm64-package . && \
+	rm -rf darwin-arm64-package
+	
+	# macOS Intel - 包含 Core ML 模型
+	@echo "📦 打包 macOS Intel (包含 Core ML 加速)..."
+	cd dist && \
+	mkdir -p darwin-amd64-package && \
+	cp $(APP_NAME)-darwin-amd64 $(LOGIN_NAME)-darwin-amd64 $(WHISPER_INIT_NAME)-darwin-amd64 darwin-amd64-package/ && \
+	mkdir -p darwin-amd64-package/models && \
+	cp ../models/ggml-base.bin darwin-amd64-package/models/ && \
+	if [ -d "../models/ggml-base.en-encoder.mlmodelc" ]; then \
+		cp -r ../models/ggml-base.en-encoder.mlmodelc darwin-amd64-package/models/; \
+	fi && \
+	tar -czf $(APP_NAME)-v$(VERSION)-darwin-amd64.tar.gz -C darwin-amd64-package . && \
+	rm -rf darwin-amd64-package
+	
+	# Windows - 仅基础模型
+	@echo "📦 打包 Windows (基础模型)..."
+	cd dist && \
+	mkdir -p windows-amd64-package && \
+	cp $(APP_NAME)-windows-amd64.exe $(LOGIN_NAME)-windows-amd64.exe $(WHISPER_INIT_NAME)-windows-amd64.exe windows-amd64-package/ && \
+	mkdir -p windows-amd64-package/models && \
+	cp ../models/ggml-base.bin windows-amd64-package/models/ && \
+	zip -r -q $(APP_NAME)-v$(VERSION)-windows-amd64.zip windows-amd64-package && \
+	rm -rf windows-amd64-package
+	
+	# Linux - 仅基础模型
+	@echo "📦 打包 Linux (基础模型)..."
+	cd dist && \
+	mkdir -p linux-amd64-package && \
+	cp $(APP_NAME)-linux-amd64 $(LOGIN_NAME)-linux-amd64 $(WHISPER_INIT_NAME)-linux-amd64 linux-amd64-package/ && \
+	mkdir -p linux-amd64-package/models && \
+	cp ../models/ggml-base.bin linux-amd64-package/models/ && \
+	tar -czf $(APP_NAME)-v$(VERSION)-linux-amd64.tar.gz -C linux-amd64-package . && \
+	rm -rf linux-amd64-package
+	
+	@echo "✅ 发布包创建完成！"
+	@echo ""
+	@echo "📋 发布包说明:"
+	@echo "   macOS: 包含 Core ML 加速模型 (~180MB)"
+	@echo "   Windows/Linux: 仅包含基础模型 (~142MB)"
+	@echo ""
 	@ls -la dist/*.tar.gz dist/*.zip
 
 # 运行服务器
@@ -148,8 +228,11 @@ help:
 	@echo "  build         构建所有二进制文件"
 	@echo "  build-server  构建 MCP 服务器"
 	@echo "  build-login   构建登录工具"
+	@echo "  build-whisper-init 构建 Whisper 初始化工具 (whisper-init)"
 	@echo "  build-all     跨平台构建"
-	@echo "  release       创建发布包"
+	@echo "  release       创建分平台发布包 (macOS含Core ML)"
+	@echo "  download-models 下载 Whisper 模型文件"
+	@echo "  prepare-models 检查模型文件"
 	@echo "  deps          安装依赖"
 	@echo "  install-playwright 安装 Playwright"
 	@echo "  test          运行测试"

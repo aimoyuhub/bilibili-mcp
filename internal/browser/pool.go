@@ -136,7 +136,6 @@ func (p *BrowserPool) GetWithAuth(accountName string) (playwright.Page, func(), 
 		logger.Infof("找到默认账号: %s", accountName)
 	}
 
-	logger.Infof("加载账号 '%s' 的cookies", accountName)
 	cookies, err := loginService.LoadCookies(accountName)
 	if err != nil {
 		logger.Errorf("加载账号 '%s' 的cookies失败: %v", accountName, err)
@@ -145,19 +144,11 @@ func (p *BrowserPool) GetWithAuth(accountName string) (playwright.Page, func(), 
 		return nil, nil, errors.Wrapf(err, "加载账号 '%s' 的cookies失败", accountName)
 	}
 
-	logger.Infof("从文件加载了 %d 个cookies", len(cookies))
-
-	// 添加cookie文件路径调试信息
-	accountManager := auth.NewAccountManager()
-	cookieFile := accountManager.GetCookieFile(accountName)
-	logger.Infof("Cookie文件路径: %s", cookieFile)
-
 	// 检查是否包含bili_jct
 	hasBiliJct := false
 	for _, cookie := range cookies {
 		if cookie.Name == "bili_jct" {
 			hasBiliJct = true
-			logger.Infof("找到bili_jct cookie: domain=%s, value=%s", cookie.Domain, cookie.Value[:8]+"...")
 			break
 		}
 	}
@@ -184,8 +175,6 @@ func (p *BrowserPool) GetWithAuth(accountName string) (playwright.Page, func(), 
 		p.Put(instance)
 		return nil, nil, errors.Wrap(err, "设置cookies失败")
 	}
-
-	logger.Infof("成功设置 %d 个cookies到浏览器上下文", len(optionalCookies))
 
 	// 创建页面
 	page, err := context.NewPage()
