@@ -28,118 +28,54 @@ jobs:
         go mod download
         go mod verify
 
-    - name: 下载 Whisper 模型
-      run: |
-        echo "📦 下载基础模型文件..."
-        mkdir -p models
-        cd models
-        
-        # 下载 base 模型 (~142MB)
-        if [ ! -f "ggml-base.bin" ]; then
-          echo "⬇️  下载 ggml-base.bin..."
-          curl -L -o ggml-base.bin "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin?download=true"
-          echo "✅ ggml-base.bin 下载完成"
-        else
-          echo "✅ ggml-base.bin 已存在"
-        fi
-        
-        # 下载 macOS Core ML 模型
-        echo "🚀 下载 macOS Core ML 加速模型..."
-        if [ ! -f "ggml-base-encoder.mlmodelc.zip" ]; then
-          echo "⬇️  下载 ggml-base Core ML 模型..."
-          curl -L -o ggml-base-encoder.mlmodelc.zip "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-encoder.mlmodelc.zip?download=true"
-          echo "✅ ggml-base Core ML 模型下载完成"
-        fi
-        
-        # 解压 Core ML 模型
-        if [ -f "ggml-base-encoder.mlmodelc.zip" ]; then
-          echo "📂 解压 ggml-base Core ML 模型..."
-          unzip -q ggml-base-encoder.mlmodelc.zip
-          rm -f ggml-base-encoder.mlmodelc.zip
-          echo "✅ ggml-base Core ML 模型解压完成"
-        fi
-        
-        cd ..
-        echo "🎉 模型下载完成！"
-        ls -la models/
+    # 不再需要下载模型，轻量化发布包
 
     - name: 运行测试
       run: go test -v ./...
 
     - name: 跨平台构建  
       run: |
-        echo "🔨 开始跨平台构建..."
-        # 模型文件已在上一步下载完成，现在清理并准备嵌入
-        make clean
-        make prepare-embed-models
-        
-        echo "🔨 开始跨平台编译..."
-        mkdir -p dist
-        
-        # macOS Apple Silicon
-        GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-mcp-darwin-arm64 ./cmd/server
-        GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-login-darwin-arm64 ./cmd/login
-        GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/whisper-init-darwin-arm64 ./cmd/whisper-init
-        
-        # macOS Intel
-        GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-mcp-darwin-amd64 ./cmd/server
-        GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-login-darwin-amd64 ./cmd/login
-        GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/whisper-init-darwin-amd64 ./cmd/whisper-init
-        
-        # Windows x64
-        GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-mcp-windows-amd64.exe ./cmd/server
-        GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-login-windows-amd64.exe ./cmd/login
-        GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/whisper-init-windows-amd64.exe ./cmd/whisper-init
-        
-        # Linux x64
-        GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-mcp-linux-amd64 ./cmd/server
-        GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-login-linux-amd64 ./cmd/login
-        GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/whisper-init-linux-amd64 ./cmd/whisper-init
-        
-        echo "跨平台构建完成！"
-        ls -la dist/
+        echo "🔨 开始轻量化跨平台构建..."
+        make build-all
 
     - name: 创建分平台发布包
       run: |
-        echo "📦 创建分平台发布包..."
-        # 模型文件已经在构建时准备好了
-        
-        # 手动执行发布打包逻辑（避免依赖 make release）
+        echo "📦 创建轻量化发布包..."
         cd dist
         
-        # macOS Apple Silicon - 仅可执行文件
+        # macOS Apple Silicon - 轻量化包
         echo "📦 打包 macOS Apple Silicon..."
         mkdir -p darwin-arm64-package
-        cp bilibili-mcp-darwin-arm64 bilibili-login-darwin-arm64 darwin-arm64-package/
+        cp bilibili-mcp-darwin-arm64 bilibili-login-darwin-arm64 whisper-init-darwin-arm64 darwin-arm64-package/
         tar -czf bilibili-mcp-${GITHUB_REF#refs/tags/}-darwin-arm64.tar.gz -C darwin-arm64-package .
         rm -rf darwin-arm64-package
         
-        # macOS Intel - 仅可执行文件
+        # macOS Intel - 轻量化包
         echo "📦 打包 macOS Intel..."
         mkdir -p darwin-amd64-package
-        cp bilibili-mcp-darwin-amd64 bilibili-login-darwin-amd64 darwin-amd64-package/
+        cp bilibili-mcp-darwin-amd64 bilibili-login-darwin-amd64 whisper-init-darwin-amd64 darwin-amd64-package/
         tar -czf bilibili-mcp-${GITHUB_REF#refs/tags/}-darwin-amd64.tar.gz -C darwin-amd64-package .
         rm -rf darwin-amd64-package
         
-        # Windows - 仅可执行文件
+        # Windows - 轻量化包
         echo "📦 打包 Windows..."
         mkdir -p windows-amd64-package
-        cp bilibili-mcp-windows-amd64.exe bilibili-login-windows-amd64.exe windows-amd64-package/
+        cp bilibili-mcp-windows-amd64.exe bilibili-login-windows-amd64.exe whisper-init-windows-amd64.exe windows-amd64-package/
         zip -r -q bilibili-mcp-${GITHUB_REF#refs/tags/}-windows-amd64.zip windows-amd64-package
         rm -rf windows-amd64-package
         
-        # Linux - 仅可执行文件
+        # Linux - 轻量化包
         echo "📦 打包 Linux..."
         mkdir -p linux-amd64-package
-        cp bilibili-mcp-linux-amd64 bilibili-login-linux-amd64 linux-amd64-package/
+        cp bilibili-mcp-linux-amd64 bilibili-login-linux-amd64 whisper-init-linux-amd64 linux-amd64-package/
         tar -czf bilibili-mcp-${GITHUB_REF#refs/tags/}-linux-amd64.tar.gz -C linux-amd64-package .
         rm -rf linux-amd64-package
         
-        echo "✅ 发布包创建完成！"
+        echo "✅ 轻量化发布包创建完成！"
         echo ""
         echo "📋 发布包说明:"
-        echo "   所有平台: 包含嵌入式模型，真正一键执行"
-        echo "   无需网络下载，解压即用"
+        echo "   所有平台: 轻量化可执行文件 (~30MB)"
+        echo "   首次使用需要运行 ./whisper-init 下载模型"
         echo ""
         ls -la *.tar.gz *.zip
 

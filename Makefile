@@ -20,7 +20,7 @@ all: build
 build: build-server build-login build-whisper-init
 
 .PHONY: build-server
-build-server: prepare-embed-models
+build-server:
 	@echo "构建 MCP 服务器..."
 	go build $(LDFLAGS) -o $(APP_NAME) ./cmd/server
 
@@ -62,10 +62,10 @@ build-all: clean
 	@echo "跨平台构建完成！"
 	@ls -la dist/
 
-# 准备嵌入模型文件
-.PHONY: prepare-embed-models
-prepare-embed-models:
-	@echo "准备嵌入模型文件..."
+# 检查模型文件
+.PHONY: prepare-models
+prepare-models:
+	@echo "检查模型文件..."
 	@if [ ! -f "models/ggml-base.bin" ]; then \
 		echo "❌ 未找到 ggml-base.bin 模型文件"; \
 		echo "💡 请运行以下命令下载模型:"; \
@@ -73,29 +73,12 @@ prepare-embed-models:
 		echo "   或者: make download-models"; \
 		exit 1; \
 	fi
-	
-	@echo "📦 创建嵌入模型目录..."
-	@mkdir -p internal/embedded/models
-	
-	@echo "📄 复制基础模型文件..."
-	@cp models/ggml-base.bin internal/embedded/models/
-	@echo "✅ 基础模型文件已准备 ($(shell ls -lh models/ggml-base.bin | awk '{print $$5}'))"
-	
+	@echo "✅ 基础模型文件检查完成"
 	@if [ -d "models/ggml-base-encoder.mlmodelc" ]; then \
-		echo "📦 打包 Core ML 模型..."; \
-		cd models && tar -czf ../internal/embedded/models/ggml-base-encoder.mlmodelc.tar.gz ggml-base-encoder.mlmodelc; \
-		echo "✅ Core ML 模型已打包"; \
+		echo "✅ 找到 Core ML 加速模型"; \
 	else \
-		echo "⚠️  未找到 Core ML 模型，创建空文件"; \
-		touch internal/embedded/models/ggml-base-encoder.mlmodelc.tar.gz; \
+		echo "⚠️  未找到 Core ML 模型，macOS 版本将不包含 Core ML 加速"; \
 	fi
-	
-	@echo "✅ 嵌入模型文件准备完成"
-	@ls -lh internal/embedded/models/
-
-# 兼容性别名
-.PHONY: prepare-models
-prepare-models: prepare-embed-models
 
 # 下载模型文件
 .PHONY: download-models
@@ -141,7 +124,6 @@ clean:
 	rm -f $(APP_NAME) $(LOGIN_NAME) $(WHISPER_INIT_NAME)
 	rm -rf dist/
 	rm -rf logs/
-	rm -rf internal/embedded/models/
 	mkdir -p dist
 
 # 创建发布包
@@ -184,8 +166,8 @@ release: build-all prepare-models
 	@echo "✅ 发布包创建完成！"
 	@echo ""
 	@echo "📋 发布包说明:"
-	@echo "   所有平台: 包含嵌入式模型，真正一键执行"
-	@echo "   无需网络下载，解压即用"
+	@echo "   所有平台: 轻量化可执行文件 (~10MB)"
+	@echo "   首次使用需要下载模型文件 (./whisper-init)"
 	@echo ""
 	@ls -la dist/*.tar.gz dist/*.zip
 

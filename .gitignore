@@ -95,5 +95,4 @@ models/
 *.bin
 *.ggml
 
-# 构建时的嵌入模型文件（临时文件）
-internal/embedded/models/
+# 移除嵌入模型相关忽略规则

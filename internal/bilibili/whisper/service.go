@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	"github.com/shirenchuang/bilibili-mcp/internal/embedded"
 	"github.com/shirenchuang/bilibili-mcp/pkg/config"
 	"github.com/shirenchuang/bilibili-mcp/pkg/logger"
 )
@@ -22,7 +21,6 @@ type Service struct {
 	config         *config.WhisperConfig
 	fullConfig     *config.Config // 完整配置，用于获取解析后的路径
 	whisperCLIPath string
-	modelManager   *embedded.ModelManager
 }
 
 // TranscribeResult 转录结果
@@ -56,9 +54,8 @@ func NewService(fullCfg *config.Config) (*Service, error) {
 	}
 
 	service := &Service{
-		config:       cfg,
-		fullConfig:   fullCfg,
-		modelManager: embedded.NewModelManager(),
+		config:     cfg,
+		fullConfig: fullCfg,
 	}
 
 	// 查找whisper-cli可执行文件
@@ -247,17 +244,6 @@ func (s *Service) selectBestAvailableModel() (string, string, error) {
 
 // tryGetModel 尝试获取指定模型的路径
 func (s *Service) tryGetModel(modelName string) (string, string, error) {
-	// 0. 优先使用嵌入的模型（仅支持 base 模型）
-	if modelName == "base" {
-		logger.Info("🚀 使用嵌入的 base 模型")
-		modelPath, err := s.modelManager.GetBaseModelPath()
-		if err != nil {
-			logger.Warnf("⚠️  嵌入模型提取失败: %v，尝试外部模型", err)
-		} else {
-			return modelPath, modelName, nil
-		}
-	}
-
 	var possiblePaths []string
 
 	// 1. 检查预制模型目录 (./models/)
@@ -289,7 +275,7 @@ func (s *Service) tryGetModel(modelName string) (string, string, error) {
 		}
 	}
 
-	return "", "", errors.Errorf("模型 %s 在以下位置都不存在: %v", modelName, possiblePaths)
+	return "", "", errors.Errorf("模型 %s 在以下位置都不存在: %v，请运行 ./whisper-init 下载模型", modelName, possiblePaths)
 }
 
 // executeWhisper 执行Whisper转录
@@ -656,13 +642,8 @@ func (s *Service) hasCoreMlModel(modelName string) bool {
 		return false
 	}
 
-	// 检查嵌入的 Core ML 模型（仅支持 base 模型）
-	if modelName == "base" && s.modelManager.HasCoreMLModel() {
-		return true
-	}
-
 	// 检查预制模型目录中的Core ML模型
-	coreMLPath := fmt.Sprintf("./models/ggml-%s.en-encoder.mlmodelc", modelName)
+	coreMLPath := fmt.Sprintf("./models/ggml-%s-encoder.mlmodelc", modelName)
 	if _, err := os.Stat(coreMLPath); err == nil {
 		return true
 	}
@@ -670,7 +651,7 @@ func (s *Service) hasCoreMlModel(modelName string) bool {
 	// 检查whisper.cpp目录中的Core ML模型（使用解析后的路径）
 	whisperCppPath := s.fullConfig.GetResolvedWhisperCppPath()
 	if whisperCppPath != "" {
-		coreMLPath = filepath.Join(whisperCppPath, "models", fmt.Sprintf("ggml-%s.en-encoder.mlmodelc", modelName))
+		coreMLPath = filepath.Join(whisperCppPath, "models", fmt.Sprintf("ggml-%s-encoder.mlmodelc", modelName))
 		if _, err := os.Stat(coreMLPath); err == nil {
 			return true
 		}
