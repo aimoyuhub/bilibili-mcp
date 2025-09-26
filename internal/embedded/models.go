@@ -16,7 +16,7 @@ import (
 //go:embed models/ggml-base.bin
 var baseModelData []byte
 
-//go:embed models/ggml-base.en-encoder.mlmodelc.tar.gz
+//go:embed models/ggml-base-encoder.mlmodelc.tar.gz
 var coreMLModelData []byte
 
 // ModelManager 嵌入模型管理器
@@ -85,7 +85,7 @@ func (m *ModelManager) GetCoreMLModelPath() (string, error) {
 		return "", err
 	}
 
-	coreMLPath := filepath.Join(tempDir, "ggml-base.en-encoder.mlmodelc")
+	coreMLPath := filepath.Join(tempDir, "ggml-base-encoder.mlmodelc")
 	if _, err := os.Stat(coreMLPath); err != nil {
 		return "", fmt.Errorf("Core ML 模型不存在")
 	}
@@ -113,7 +113,7 @@ func (m *ModelManager) extractFile(data []byte, targetPath string) error {
 // extractCoreMLModel 提取并解压 Core ML 模型
 func (m *ModelManager) extractCoreMLModel(tempDir string) error {
 	// 先提取 tar.gz 文件
-	tarPath := filepath.Join(tempDir, "ggml-base.en-encoder.mlmodelc.tar.gz")
+	tarPath := filepath.Join(tempDir, "ggml-base-encoder.mlmodelc.tar.gz")
 	if err := m.extractFile(coreMLModelData, tarPath); err != nil {
 		return fmt.Errorf("提取 tar.gz 文件失败: %w", err)
 	}

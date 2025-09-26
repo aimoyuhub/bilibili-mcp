@@ -83,11 +83,11 @@ prepare-embed-models:
 	
 	@if [ -d "models/ggml-base-encoder.mlmodelc" ]; then \
 		echo "📦 打包 Core ML 模型..."; \
-		cd models && tar -czf ../internal/embedded/models/ggml-base.en-encoder.mlmodelc.tar.gz ggml-base-encoder.mlmodelc; \
+		cd models && tar -czf ../internal/embedded/models/ggml-base-encoder.mlmodelc.tar.gz ggml-base-encoder.mlmodelc; \
 		echo "✅ Core ML 模型已打包"; \
 	else \
 		echo "⚠️  未找到 Core ML 模型，创建空文件"; \
-		touch internal/embedded/models/ggml-base.en-encoder.mlmodelc.tar.gz; \
+		touch internal/embedded/models/ggml-base-encoder.mlmodelc.tar.gz; \
 	fi
 	
 	@echo "✅ 嵌入模型文件准备完成"
