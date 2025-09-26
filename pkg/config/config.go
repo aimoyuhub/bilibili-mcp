@@ -100,11 +100,11 @@ func Load(configPath string) (*Config, error) {
 	// 设置默认值
 	setDefaults()
 
-	// 尝试读取配置文件，如果文件不存在则使用默认值
+	// 尝试读取配置文件，如果文件不存在则静默使用默认值
 	if err := viper.ReadInConfig(); err != nil {
-		// 如果是文件不存在的错误，使用默认配置
+		// 如果是文件不存在的错误，静默使用默认配置
 		if os.IsNotExist(err) {
-			fmt.Printf("⚠️  配置文件 %s 不存在，使用默认配置\n", configPath)
+			// 不显示警告，静默使用默认配置
 		} else {
 			// 其他错误（如格式错误）仍然返回错误
 			return nil, fmt.Errorf("读取配置文件失败: %w", err)

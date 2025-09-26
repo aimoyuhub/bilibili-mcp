@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	// 默认使用最小模型
-	defaultModel = "tiny"
+	// 默认使用基础模型
+	defaultModel = "base"
 	// Whisper.cpp GitHub仓库
 	whisperRepo = "https://github.com/ggerganov/whisper.cpp.git"
 )
@@ -156,13 +156,35 @@ func getGPUStatus(info *SystemInfo) string {
 	return "CPU模式"
 }
 
+// findModelsDir 智能查找 models 目录
+func (w *WhisperSetup) findModelsDir() string {
+	// 1. 先检查当前目录
+	if _, err := os.Stat("./models"); err == nil {
+		return "./models"
+	}
+
+	// 2. 检查可执行文件所在目录
+	execPath, err := os.Executable()
+	if err == nil {
+		execDir := filepath.Dir(execPath)
+		modelsInExecDir := filepath.Join(execDir, "models")
+		if _, err := os.Stat(modelsInExecDir); err == nil {
+			return modelsInExecDir
+		}
+	}
+
+	// 3. 默认返回当前目录下的 models
+	return "./models"
+}
+
 // checkPrebuiltModels 检查预制模型
 func (w *WhisperSetup) checkPrebuiltModels() error {
 	fmt.Println("\n1️⃣  检查预制模型...")
 
-	modelsDir := "./models"
-	prebuiltModels := []string{"ggml-tiny.bin", "ggml-base.bin"}
-	coreMLModels := []string{"ggml-tiny.en-encoder.mlmodelc", "ggml-base.en-encoder.mlmodelc"}
+	// 智能查找 models 目录
+	modelsDir := w.findModelsDir()
+	prebuiltModels := []string{"ggml-base.bin"}            // 只检查 base 模型
+	coreMLModels := []string{"ggml-base-encoder.mlmodelc"} // 修正 Core ML 模型名称
 
 	w.PrebuiltModels = []string{}
 
@@ -194,15 +216,36 @@ func (w *WhisperSetup) checkPrebuiltModels() error {
 	}
 
 	if len(w.PrebuiltModels) == 0 {
-		fmt.Println("❌ 未找到预制模型")
-		fmt.Println("💡 建议：下载模型文件到 ./models/ 目录")
-		fmt.Println("   基础模型: ggml-tiny.bin, ggml-base.bin")
+		fmt.Printf("❌ 未找到预制模型 (检查目录: %s)\n", modelsDir)
+		fmt.Println()
+		fmt.Println("📥 手动下载模型文件指南：")
+		fmt.Println("====================")
+		fmt.Printf("请将以下模型文件下载到 %s 目录：\n", modelsDir)
+		fmt.Println()
+
+		// 基础模型
+		fmt.Println("🔹 基础模型 (必需):")
+		fmt.Println("   文件名: ggml-base.bin")
+		fmt.Println("   大小: ~142MB")
+		fmt.Println("   下载地址: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin")
+		fmt.Println("   直接下载: curl -L -o ggml-base.bin 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin?download=true'")
+
+		// macOS Core ML 模型
 		if runtime.GOOS == "darwin" {
-			fmt.Println("   Core ML: ggml-tiny.en-encoder.mlmodelc.zip, ggml-base.en-encoder.mlmodelc.zip")
+			fmt.Println()
+			fmt.Println("🚀 Core ML 加速模型 (macOS 推荐):")
+			fmt.Println("   文件名: ggml-base-encoder.mlmodelc (解压后的文件夹)")
+			fmt.Println("   大小: ~6MB (压缩包)")
+			fmt.Println("   下载地址: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-encoder.mlmodelc.zip")
+			fmt.Println("   直接下载: curl -L -o ggml-base-encoder.mlmodelc.zip 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-encoder.mlmodelc.zip?download=true'")
+			fmt.Println("   解压命令: unzip ggml-base-encoder.mlmodelc.zip && rm ggml-base-encoder.mlmodelc.zip")
 		}
-		fmt.Println("   下载地址: https://huggingface.co/ggerganov/whisper.cpp")
+
+		fmt.Println()
+		fmt.Println("💡 下载完成后请重新运行此工具进行检测")
+		fmt.Println("   如果网络较慢，建议使用下载工具或分段下载")
 	} else {
-		fmt.Printf("✅ 找到 %d 个预制模型\n", len(w.PrebuiltModels))
+		fmt.Printf("✅ 找到 %d 个预制模型 (目录: %s)\n", len(w.PrebuiltModels), modelsDir)
 	}
 
 	return nil
@@ -378,15 +421,15 @@ func (w *WhisperSetup) setupModels() error {
 
 	// 如果有预制模型，优先使用
 	if len(w.PrebuiltModels) > 0 {
-		// 优先使用tiny模型
+		// 优先使用base模型
 		for _, modelPath := range w.PrebuiltModels {
-			if strings.Contains(modelPath, "tiny") {
+			if strings.Contains(modelPath, "base") {
 				w.ModelPath = modelPath
 				fmt.Printf("✅ 使用预制模型: %s\n", filepath.Base(modelPath))
 				return nil
 			}
 		}
-		// 如果没有tiny，使用第一个可用的模型
+		// 如果没有base，使用第一个可用的模型
 		w.ModelPath = w.PrebuiltModels[0]
 		fmt.Printf("✅ 使用预制模型: %s\n", filepath.Base(w.ModelPath))
 		return nil
@@ -408,7 +451,24 @@ func (w *WhisperSetup) setupModels() error {
 		// 尝试下载模型
 		fmt.Printf("正在下载 %s 模型...\n", defaultModel)
 		if err := w.downloadModel(modelsPath, defaultModel); err != nil {
-			return errors.Wrap(err, "下载模型失败")
+			fmt.Println("\n❌ 自动下载模型失败")
+			fmt.Println("📥 请手动下载模型文件：")
+			fmt.Println("====================")
+			fmt.Printf("请将以下模型文件下载到 %s 目录：\n", modelsPath)
+			fmt.Println()
+
+			// 基础模型下载指南
+			fmt.Println("🔹 基础模型 (必需):")
+			fmt.Printf("   文件名: ggml-%s.bin\n", defaultModel)
+			fmt.Println("   大小: ~142MB")
+			fmt.Printf("   下载地址: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-%s.bin\n", defaultModel)
+			fmt.Printf("   直接下载: curl -L -o ggml-%s.bin 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-%s.bin?download=true'\n", defaultModel, defaultModel)
+
+			fmt.Println()
+			fmt.Println("💡 下载完成后请重新运行此工具")
+			fmt.Println("   如果网络较慢，建议使用下载工具或分段下载")
+
+			return fmt.Errorf("需要手动下载模型: %v", err)
 		}
 
 		w.ModelPath = modelPath

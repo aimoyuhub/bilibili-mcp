@@ -80,7 +80,6 @@ jobs:
         echo "📦 打包 macOS Apple Silicon（包含 Core ML 加速）..."
         mkdir -p darwin-arm64-package/models
         cp bilibili-mcp-darwin-arm64 bilibili-login-darwin-arm64 whisper-init-darwin-arm64 darwin-arm64-package/
-        cp ../config.yaml darwin-arm64-package/
         cp ../models/ggml-base.bin darwin-arm64-package/models/
         if [ -d "../models/ggml-base-encoder.mlmodelc" ]; then
           cp -r ../models/ggml-base-encoder.mlmodelc darwin-arm64-package/models/
@@ -92,7 +91,6 @@ jobs:
         echo "📦 打包 macOS Intel（包含 Core ML 加速）..."
         mkdir -p darwin-amd64-package/models
         cp bilibili-mcp-darwin-amd64 bilibili-login-darwin-amd64 whisper-init-darwin-amd64 darwin-amd64-package/
-        cp ../config.yaml darwin-amd64-package/
         cp ../models/ggml-base.bin darwin-amd64-package/models/
         if [ -d "../models/ggml-base-encoder.mlmodelc" ]; then
           cp -r ../models/ggml-base-encoder.mlmodelc darwin-amd64-package/models/
@@ -104,7 +102,6 @@ jobs:
         echo "📦 打包 Windows（仅基础模型）..."
         mkdir -p windows-amd64-package/models
         cp bilibili-mcp-windows-amd64.exe bilibili-login-windows-amd64.exe whisper-init-windows-amd64.exe windows-amd64-package/
-        cp ../config.yaml windows-amd64-package/
         cp ../models/ggml-base.bin windows-amd64-package/models/
         zip -r -q bilibili-mcp-${GITHUB_REF#refs/tags/}-windows-amd64.zip windows-amd64-package
         rm -rf windows-amd64-package
@@ -113,7 +110,6 @@ jobs:
         echo "📦 打包 Linux（仅基础模型）..."
         mkdir -p linux-amd64-package/models
         cp bilibili-mcp-linux-amd64 bilibili-login-linux-amd64 whisper-init-linux-amd64 linux-amd64-package/
-        cp ../config.yaml linux-amd64-package/
         cp ../models/ggml-base.bin linux-amd64-package/models/
         tar -czf bilibili-mcp-${GITHUB_REF#refs/tags/}-linux-amd64.tar.gz -C linux-amd64-package .
         rm -rf linux-amd64-package

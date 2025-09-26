@@ -35,7 +35,6 @@ bilibili-mcp-vX.X.X-darwin-arm64/
 ├── bilibili-mcp          # 主服务程序
 ├── bilibili-login        # 登录工具
 ├── whisper-init          # 模型下载工具
-├── config.yaml           # 默认配置文件
 └── models/               # 模型文件目录
     ├── ggml-base.bin     # 基础模型
     └── ggml-base-encoder.mlmodelc/  # Core ML 加速模型 (仅 macOS)
@@ -43,9 +42,14 @@ bilibili-mcp-vX.X.X-darwin-arm64/
 
 **🚀 开箱即用设计**：
 - ✅ 包含预下载模型文件（macOS ~180MB, 其他 ~150MB）
-- ✅ 包含默认配置文件，可直接使用  
+- ✅ 内置默认配置，无需配置文件  
 - ✅ 解压即用，无需额外下载
 - ✅ 支持 Core ML 加速（macOS）
+
+**⚙️ 配置说明**：
+- 程序内置合理的默认配置，开箱即用
+- 如需自定义，可在程序目录创建 `config.yaml` 覆盖默认设置
+- 参考 `config.example.yaml` 了解可配置项
 
 #### 方式二：从源码编译
 

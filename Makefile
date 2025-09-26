@@ -136,7 +136,6 @@ release: build-all prepare-models
 	cd dist && \
 	mkdir -p darwin-arm64-package/models && \
 	cp $(APP_NAME)-darwin-arm64 $(LOGIN_NAME)-darwin-arm64 $(WHISPER_INIT_NAME)-darwin-arm64 darwin-arm64-package/ && \
-	cp ../config.yaml darwin-arm64-package/ && \
 	cp ../models/ggml-base.bin darwin-arm64-package/models/ && \
 	if [ -d "../models/ggml-base-encoder.mlmodelc" ]; then cp -r ../models/ggml-base-encoder.mlmodelc darwin-arm64-package/models/; fi && \
 	tar -czf $(APP_NAME)-v$(VERSION)-darwin-arm64.tar.gz -C darwin-arm64-package . && \
@@ -147,7 +146,6 @@ release: build-all prepare-models
 	cd dist && \
 	mkdir -p darwin-amd64-package/models && \
 	cp $(APP_NAME)-darwin-amd64 $(LOGIN_NAME)-darwin-amd64 $(WHISPER_INIT_NAME)-darwin-amd64 darwin-amd64-package/ && \
-	cp ../config.yaml darwin-amd64-package/ && \
 	cp ../models/ggml-base.bin darwin-amd64-package/models/ && \
 	if [ -d "../models/ggml-base-encoder.mlmodelc" ]; then cp -r ../models/ggml-base-encoder.mlmodelc darwin-amd64-package/models/; fi && \
 	tar -czf $(APP_NAME)-v$(VERSION)-darwin-amd64.tar.gz -C darwin-amd64-package . && \
@@ -158,7 +156,6 @@ release: build-all prepare-models
 	cd dist && \
 	mkdir -p windows-amd64-package/models && \
 	cp $(APP_NAME)-windows-amd64.exe $(LOGIN_NAME)-windows-amd64.exe $(WHISPER_INIT_NAME)-windows-amd64.exe windows-amd64-package/ && \
-	cp ../config.yaml windows-amd64-package/ && \
 	cp ../models/ggml-base.bin windows-amd64-package/models/ && \
 	zip -r -q $(APP_NAME)-v$(VERSION)-windows-amd64.zip windows-amd64-package && \
 	rm -rf windows-amd64-package
@@ -168,7 +165,6 @@ release: build-all prepare-models
 	cd dist && \
 	mkdir -p linux-amd64-package/models && \
 	cp $(APP_NAME)-linux-amd64 $(LOGIN_NAME)-linux-amd64 $(WHISPER_INIT_NAME)-linux-amd64 linux-amd64-package/ && \
-	cp ../config.yaml linux-amd64-package/ && \
 	cp ../models/ggml-base.bin linux-amd64-package/models/ && \
 	tar -czf $(APP_NAME)-v$(VERSION)-linux-amd64.tar.gz -C linux-amd64-package . && \
 	rm -rf linux-amd64-package
