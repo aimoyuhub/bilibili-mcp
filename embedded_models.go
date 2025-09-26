@@ -11,12 +11,12 @@ import (
 	"github.com/shirenchuang/bilibili-mcp/pkg/logger"
 )
 
-// 嵌入模型文件（构建时从 models/ 复制到此目录）
+// 嵌入模型文件（直接引用外层 models/ 目录）
 //
-//go:embed models/ggml-base.bin
+//go:embed ../../models/ggml-base.bin
 var baseModelData []byte
 
-//go:embed models/ggml-base.en-encoder.mlmodelc.tar.gz
+//go:embed ../../models/ggml-base.en-encoder.mlmodelc.tar.gz
 var coreMLModelData []byte
 
 // ModelManager 嵌入模型管理器
