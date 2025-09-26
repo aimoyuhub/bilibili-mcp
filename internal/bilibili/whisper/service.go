@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/shirenchuang/bilibili-mcp/internal/embedded"
 	"github.com/shirenchuang/bilibili-mcp/pkg/config"
 	"github.com/shirenchuang/bilibili-mcp/pkg/logger"
 )
@@ -21,6 +22,7 @@ type Service struct {
 	config         *config.WhisperConfig
 	fullConfig     *config.Config // 完整配置，用于获取解析后的路径
 	whisperCLIPath string
+	modelManager   *embedded.ModelManager
 }
 
 // TranscribeResult 转录结果
@@ -54,8 +56,9 @@ func NewService(fullCfg *config.Config) (*Service, error) {
 	}
 
 	service := &Service{
-		config:     cfg,
-		fullConfig: fullCfg,
+		config:       cfg,
+		fullConfig:   fullCfg,
+		modelManager: embedded.NewModelManager(),
 	}
 
 	// 查找whisper-cli可执行文件
@@ -244,6 +247,17 @@ func (s *Service) selectBestAvailableModel() (string, string, error) {
 
 // tryGetModel 尝试获取指定模型的路径
 func (s *Service) tryGetModel(modelName string) (string, string, error) {
+	// 0. 优先使用嵌入的模型（仅支持 base 模型）
+	if modelName == "base" {
+		logger.Info("🚀 使用嵌入的 base 模型")
+		modelPath, err := s.modelManager.GetBaseModelPath()
+		if err != nil {
+			logger.Warnf("⚠️  嵌入模型提取失败: %v，尝试外部模型", err)
+		} else {
+			return modelPath, modelName, nil
+		}
+	}
+
 	var possiblePaths []string
 
 	// 1. 检查预制模型目录 (./models/)
@@ -640,6 +654,11 @@ func (s *Service) getModelPaths(modelName string) []string {
 func (s *Service) hasCoreMlModel(modelName string) bool {
 	if runtime.GOOS != "darwin" {
 		return false
+	}
+
+	// 检查嵌入的 Core ML 模型（仅支持 base 模型）
+	if modelName == "base" && s.modelManager.HasCoreMLModel() {
+		return true
 	}
 
 	// 检查预制模型目录中的Core ML模型

@@ -166,8 +166,8 @@ release: build-all prepare-models
 	@echo "✅ 发布包创建完成！"
 	@echo ""
 	@echo "📋 发布包说明:"
-	@echo "   所有平台: 仅包含可执行文件，轻量化设计"
-	@echo "   使用时会自动下载所需的模型文件"
+	@echo "   所有平台: 包含嵌入式模型，真正一键执行"
+	@echo "   无需网络下载，解压即用"
 	@echo ""
 	@ls -la dist/*.tar.gz dist/*.zip
 
