@@ -31,9 +31,9 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "🚀 下载 macOS Core ML 加速模型..."
     
     # 下载 base Core ML 模型
-    if [ ! -f "ggml-base.en-encoder.mlmodelc.zip" ] && [ ! -d "ggml-base.en-encoder.mlmodelc" ]; then
+    if [ ! -f "ggml-base-encoder.mlmodelc.zip" ] && [ ! -d "ggml-base-encoder.mlmodelc" ]; then
         echo "⬇️  下载 ggml-base Core ML 模型..."
-        curl -L -o ggml-base.en-encoder.mlmodelc.zip "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en-encoder.mlmodelc.zip?download=true"
+        curl -L -o ggml-base-encoder.mlmodelc.zip "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-encoder.mlmodelc.zip?download=true"
         echo "✅ ggml-base Core ML 模型下载完成"
     else
         echo "✅ ggml-base Core ML 模型已存在"
@@ -43,9 +43,9 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "📦 解压 Core ML 模型..."
     
     # 解压 Core ML 模型
-    if [ -f "ggml-base.en-encoder.mlmodelc.zip" ] && [ ! -d "ggml-base.en-encoder.mlmodelc" ]; then
+    if [ -f "ggml-base-encoder.mlmodelc.zip" ] && [ ! -d "ggml-base-encoder.mlmodelc" ]; then
         echo "📂 解压 ggml-base Core ML 模型..."
-        unzip -q ggml-base.en-encoder.mlmodelc.zip
+        unzip -q ggml-base-encoder.mlmodelc.zip
         echo "✅ ggml-base Core ML 模型解压完成"
     fi
     

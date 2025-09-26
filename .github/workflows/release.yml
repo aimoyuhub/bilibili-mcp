@@ -45,17 +45,17 @@ jobs:
         
         # 下载 macOS Core ML 模型
         echo "🚀 下载 macOS Core ML 加速模型..."
-        if [ ! -f "ggml-base.en-encoder.mlmodelc.zip" ]; then
+        if [ ! -f "ggml-base-encoder.mlmodelc.zip" ]; then
           echo "⬇️  下载 ggml-base Core ML 模型..."
-          curl -L -o ggml-base.en-encoder.mlmodelc.zip "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en-encoder.mlmodelc.zip?download=true"
+          curl -L -o ggml-base-encoder.mlmodelc.zip "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-encoder.mlmodelc.zip?download=true"
           echo "✅ ggml-base Core ML 模型下载完成"
         fi
         
         # 解压 Core ML 模型
-        if [ -f "ggml-base.en-encoder.mlmodelc.zip" ]; then
+        if [ -f "ggml-base-encoder.mlmodelc.zip" ]; then
           echo "📂 解压 ggml-base Core ML 模型..."
-          unzip -q ggml-base.en-encoder.mlmodelc.zip
-          rm -f ggml-base.en-encoder.mlmodelc.zip
+          unzip -q ggml-base-encoder.mlmodelc.zip
+          rm -f ggml-base-encoder.mlmodelc.zip
           echo "✅ ggml-base Core ML 模型解压完成"
         fi
         
@@ -66,15 +66,16 @@ jobs:
     - name: 运行测试
       run: go test -v ./...
 
-    - name: 跨平台构建
+    - name: 跨平台构建  
       run: |
         echo "🔨 开始跨平台构建..."
+        # 模型文件已在上一步下载完成，直接构建
         make build-all
 
     - name: 创建分平台发布包
       run: |
         echo "📦 创建分平台发布包..."
-        make prepare-models
+        # 模型文件已经在构建时准备好了
         
         # 手动执行发布打包逻辑（避免依赖 make release）
         cd dist
