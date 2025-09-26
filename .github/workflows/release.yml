@@ -28,7 +28,40 @@ jobs:
         go mod download
         go mod verify
 
-    # 不再需要下载模型，轻量化发布包
+    - name: 下载 Whisper 模型（用于发布包）
+      run: |
+        echo "📦 下载模型文件用于发布包..."
+        mkdir -p models
+        cd models
+        
+        # 下载 base 模型 (~142MB)
+        if [ ! -f "ggml-base.bin" ]; then
+          echo "⬇️  下载 ggml-base.bin..."
+          curl -L -o ggml-base.bin "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin?download=true"
+          echo "✅ ggml-base.bin 下载完成"
+        else
+          echo "✅ ggml-base.bin 已存在"
+        fi
+        
+        # 下载 macOS Core ML 模型
+        echo "🚀 下载 macOS Core ML 加速模型..."
+        if [ ! -f "ggml-base-encoder.mlmodelc.zip" ]; then
+          echo "⬇️  下载 ggml-base Core ML 模型..."
+          curl -L -o ggml-base-encoder.mlmodelc.zip "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-encoder.mlmodelc.zip?download=true"
+          echo "✅ ggml-base Core ML 模型下载完成"
+        fi
+        
+        # 解压 Core ML 模型
+        if [ -f "ggml-base-encoder.mlmodelc.zip" ]; then
+          echo "📂 解压 ggml-base Core ML 模型..."
+          unzip -q ggml-base-encoder.mlmodelc.zip
+          rm -f ggml-base-encoder.mlmodelc.zip
+          echo "✅ ggml-base Core ML 模型解压完成"
+        fi
+        
+        cd ..
+        echo "🎉 模型下载完成！"
+        ls -la models/
 
     - name: 运行测试
       run: go test -v ./...
@@ -40,42 +73,53 @@ jobs:
 
     - name: 创建分平台发布包
       run: |
-        echo "📦 创建轻量化发布包..."
+        echo "📦 创建包含模型的发布包..."
         cd dist
         
-        # macOS Apple Silicon - 轻量化包
-        echo "📦 打包 macOS Apple Silicon..."
-        mkdir -p darwin-arm64-package
+        # macOS Apple Silicon - 包含 Core ML 模型
+        echo "📦 打包 macOS Apple Silicon（包含 Core ML 加速）..."
+        mkdir -p darwin-arm64-package/models
         cp bilibili-mcp-darwin-arm64 bilibili-login-darwin-arm64 whisper-init-darwin-arm64 darwin-arm64-package/
+        cp ../models/ggml-base.bin darwin-arm64-package/models/
+        if [ -d "../models/ggml-base-encoder.mlmodelc" ]; then
+          cp -r ../models/ggml-base-encoder.mlmodelc darwin-arm64-package/models/
+        fi
         tar -czf bilibili-mcp-${GITHUB_REF#refs/tags/}-darwin-arm64.tar.gz -C darwin-arm64-package .
         rm -rf darwin-arm64-package
         
-        # macOS Intel - 轻量化包
-        echo "📦 打包 macOS Intel..."
-        mkdir -p darwin-amd64-package
+        # macOS Intel - 包含 Core ML 模型
+        echo "📦 打包 macOS Intel（包含 Core ML 加速）..."
+        mkdir -p darwin-amd64-package/models
         cp bilibili-mcp-darwin-amd64 bilibili-login-darwin-amd64 whisper-init-darwin-amd64 darwin-amd64-package/
+        cp ../models/ggml-base.bin darwin-amd64-package/models/
+        if [ -d "../models/ggml-base-encoder.mlmodelc" ]; then
+          cp -r ../models/ggml-base-encoder.mlmodelc darwin-amd64-package/models/
+        fi
         tar -czf bilibili-mcp-${GITHUB_REF#refs/tags/}-darwin-amd64.tar.gz -C darwin-amd64-package .
         rm -rf darwin-amd64-package
         
-        # Windows - 轻量化包
-        echo "📦 打包 Windows..."
-        mkdir -p windows-amd64-package
+        # Windows - 仅基础模型
+        echo "📦 打包 Windows（仅基础模型）..."
+        mkdir -p windows-amd64-package/models
         cp bilibili-mcp-windows-amd64.exe bilibili-login-windows-amd64.exe whisper-init-windows-amd64.exe windows-amd64-package/
+        cp ../models/ggml-base.bin windows-amd64-package/models/
         zip -r -q bilibili-mcp-${GITHUB_REF#refs/tags/}-windows-amd64.zip windows-amd64-package
         rm -rf windows-amd64-package
         
-        # Linux - 轻量化包
-        echo "📦 打包 Linux..."
-        mkdir -p linux-amd64-package
+        # Linux - 仅基础模型
+        echo "📦 打包 Linux（仅基础模型）..."
+        mkdir -p linux-amd64-package/models
         cp bilibili-mcp-linux-amd64 bilibili-login-linux-amd64 whisper-init-linux-amd64 linux-amd64-package/
+        cp ../models/ggml-base.bin linux-amd64-package/models/
         tar -czf bilibili-mcp-${GITHUB_REF#refs/tags/}-linux-amd64.tar.gz -C linux-amd64-package .
         rm -rf linux-amd64-package
         
-        echo "✅ 轻量化发布包创建完成！"
+        echo "✅ 包含模型的发布包创建完成！"
         echo ""
         echo "📋 发布包说明:"
-        echo "   所有平台: 轻量化可执行文件 (~30MB)"
-        echo "   首次使用需要运行 ./whisper-init 下载模型"
+        echo "   macOS: 包含 Core ML 加速模型 (~180MB)"
+        echo "   Windows/Linux: 包含基础模型 (~150MB)"
+        echo "   解压即用，无需额外下载"
         echo ""
         ls -la *.tar.gz *.zip
 

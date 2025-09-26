@@ -131,43 +131,50 @@ clean:
 release: build-all prepare-models
 	@echo "创建分平台发布包..."
 	
-	# macOS Apple Silicon - 仅可执行文件
-	@echo "📦 打包 macOS Apple Silicon..."
+	# macOS Apple Silicon - 包含 Core ML 模型
+	@echo "📦 打包 macOS Apple Silicon（包含 Core ML 加速）..."
 	cd dist && \
-	mkdir -p darwin-arm64-package && \
-	cp $(APP_NAME)-darwin-arm64 $(LOGIN_NAME)-darwin-arm64 darwin-arm64-package/ && \
+	mkdir -p darwin-arm64-package/models && \
+	cp $(APP_NAME)-darwin-arm64 $(LOGIN_NAME)-darwin-arm64 $(WHISPER_INIT_NAME)-darwin-arm64 darwin-arm64-package/ && \
+	cp ../models/ggml-base.bin darwin-arm64-package/models/ && \
+	if [ -d "../models/ggml-base-encoder.mlmodelc" ]; then cp -r ../models/ggml-base-encoder.mlmodelc darwin-arm64-package/models/; fi && \
 	tar -czf $(APP_NAME)-v$(VERSION)-darwin-arm64.tar.gz -C darwin-arm64-package . && \
 	rm -rf darwin-arm64-package
 	
-	# macOS Intel - 仅可执行文件
-	@echo "📦 打包 macOS Intel..."
+	# macOS Intel - 包含 Core ML 模型
+	@echo "📦 打包 macOS Intel（包含 Core ML 加速）..."
 	cd dist && \
-	mkdir -p darwin-amd64-package && \
-	cp $(APP_NAME)-darwin-amd64 $(LOGIN_NAME)-darwin-amd64 darwin-amd64-package/ && \
+	mkdir -p darwin-amd64-package/models && \
+	cp $(APP_NAME)-darwin-amd64 $(LOGIN_NAME)-darwin-amd64 $(WHISPER_INIT_NAME)-darwin-amd64 darwin-amd64-package/ && \
+	cp ../models/ggml-base.bin darwin-amd64-package/models/ && \
+	if [ -d "../models/ggml-base-encoder.mlmodelc" ]; then cp -r ../models/ggml-base-encoder.mlmodelc darwin-amd64-package/models/; fi && \
 	tar -czf $(APP_NAME)-v$(VERSION)-darwin-amd64.tar.gz -C darwin-amd64-package . && \
 	rm -rf darwin-amd64-package
 	
-	# Windows - 仅可执行文件
-	@echo "📦 打包 Windows..."
+	# Windows - 仅基础模型
+	@echo "📦 打包 Windows（仅基础模型）..."
 	cd dist && \
-	mkdir -p windows-amd64-package && \
-	cp $(APP_NAME)-windows-amd64.exe $(LOGIN_NAME)-windows-amd64.exe windows-amd64-package/ && \
+	mkdir -p windows-amd64-package/models && \
+	cp $(APP_NAME)-windows-amd64.exe $(LOGIN_NAME)-windows-amd64.exe $(WHISPER_INIT_NAME)-windows-amd64.exe windows-amd64-package/ && \
+	cp ../models/ggml-base.bin windows-amd64-package/models/ && \
 	zip -r -q $(APP_NAME)-v$(VERSION)-windows-amd64.zip windows-amd64-package && \
 	rm -rf windows-amd64-package
 	
-	# Linux - 仅可执行文件
-	@echo "📦 打包 Linux..."
+	# Linux - 仅基础模型
+	@echo "📦 打包 Linux（仅基础模型）..."
 	cd dist && \
-	mkdir -p linux-amd64-package && \
-	cp $(APP_NAME)-linux-amd64 $(LOGIN_NAME)-linux-amd64 linux-amd64-package/ && \
+	mkdir -p linux-amd64-package/models && \
+	cp $(APP_NAME)-linux-amd64 $(LOGIN_NAME)-linux-amd64 $(WHISPER_INIT_NAME)-linux-amd64 linux-amd64-package/ && \
+	cp ../models/ggml-base.bin linux-amd64-package/models/ && \
 	tar -czf $(APP_NAME)-v$(VERSION)-linux-amd64.tar.gz -C linux-amd64-package . && \
 	rm -rf linux-amd64-package
 	
 	@echo "✅ 发布包创建完成！"
 	@echo ""
 	@echo "📋 发布包说明:"
-	@echo "   所有平台: 轻量化可执行文件 (~10MB)"
-	@echo "   首次使用需要下载模型文件 (./whisper-init)"
+	@echo "   macOS: 包含 Core ML 加速模型 (~180MB)"
+	@echo "   Windows/Linux: 包含基础模型 (~150MB)"
+	@echo "   解压即用，无需额外下载"
 	@echo ""
 	@ls -la dist/*.tar.gz dist/*.zip
 
