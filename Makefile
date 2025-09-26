@@ -36,7 +36,7 @@ build-whisper-init:
 
 # 跨平台构建
 .PHONY: build-all
-build-all: clean prepare-embed-models
+build-all: clean
 	@echo "开始跨平台构建..."
 	
 	# macOS Apple Silicon

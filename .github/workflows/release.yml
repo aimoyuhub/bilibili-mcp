@@ -69,8 +69,35 @@ jobs:
     - name: 跨平台构建  
       run: |
         echo "🔨 开始跨平台构建..."
-        # 模型文件已在上一步下载完成，直接构建
-        make build-all
+        # 模型文件已在上一步下载完成，现在清理并准备嵌入
+        make clean
+        make prepare-embed-models
+        
+        echo "🔨 开始跨平台编译..."
+        mkdir -p dist
+        
+        # macOS Apple Silicon
+        GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-mcp-darwin-arm64 ./cmd/server
+        GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-login-darwin-arm64 ./cmd/login
+        GOOS=darwin GOARCH=arm64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/whisper-init-darwin-arm64 ./cmd/whisper-init
+        
+        # macOS Intel
+        GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-mcp-darwin-amd64 ./cmd/server
+        GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-login-darwin-amd64 ./cmd/login
+        GOOS=darwin GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/whisper-init-darwin-amd64 ./cmd/whisper-init
+        
+        # Windows x64
+        GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-mcp-windows-amd64.exe ./cmd/server
+        GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-login-windows-amd64.exe ./cmd/login
+        GOOS=windows GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/whisper-init-windows-amd64.exe ./cmd/whisper-init
+        
+        # Linux x64
+        GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-mcp-linux-amd64 ./cmd/server
+        GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/bilibili-login-linux-amd64 ./cmd/login
+        GOOS=linux GOARCH=amd64 go build -ldflags "-X main.Version=${GITHUB_REF#refs/tags/} -X main.BuildTime=$(date -u '+%Y-%m-%d_%H:%M:%S') -X main.GoVersion=$(go version | awk '{print $3}')" -o dist/whisper-init-linux-amd64 ./cmd/whisper-init
+        
+        echo "跨平台构建完成！"
+        ls -la dist/
 
     - name: 创建分平台发布包
       run: |
