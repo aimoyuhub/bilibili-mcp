@@ -6,12 +6,39 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/shirenchuang/bilibili-mcp/internal/bilibili/auth"
 	"github.com/shirenchuang/bilibili-mcp/pkg/config"
 	"github.com/shirenchuang/bilibili-mcp/pkg/logger"
 )
+
+// findConfigFile 智能查找配置文件
+func findConfigFile(defaultPath string) string {
+	// 1. 如果指定了绝对路径，直接使用
+	if filepath.IsAbs(defaultPath) {
+		return defaultPath
+	}
+
+	// 2. 先在当前工作目录查找
+	if _, err := os.Stat(defaultPath); err == nil {
+		return defaultPath
+	}
+
+	// 3. 在可执行文件所在目录查找
+	execPath, err := os.Executable()
+	if err == nil {
+		execDir := filepath.Dir(execPath)
+		configInExecDir := filepath.Join(execDir, defaultPath)
+		if _, err := os.Stat(configInExecDir); err == nil {
+			return configInExecDir
+		}
+	}
+
+	// 4. 都找不到，返回原路径（让程序使用默认配置）
+	return defaultPath
+}
 
 func main() {
 	// 解析命令行参数
@@ -22,6 +49,9 @@ func main() {
 	flag.StringVar(&accountName, "account", "", "账号名称（用于区分多账号）")
 	flag.StringVar(&configPath, "config", "config.yaml", "配置文件路径")
 	flag.Parse()
+
+	// 智能查找配置文件
+	configPath = findConfigFile(configPath)
 
 	// 加载配置
 	cfg, err := config.Load(configPath)
