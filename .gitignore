@@ -23,8 +23,8 @@ dist/
 logs/
 *.log
 
-# 配置文件（保留示例）
-config.yaml
+# 配置文件（包含默认配置，用户可以修改）
+# config.yaml 现在包含在 Git 中提供默认配置
 !config.example.yaml
 
 # Cookies 和用户数据

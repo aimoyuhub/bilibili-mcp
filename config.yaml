@@ -1,0 +1,41 @@
+# Bilibili MCP 配置文件
+server:
+  port: 18666
+  host: "localhost"
+
+bilibili:
+  base_url: "https://www.bilibili.com"
+  api_url: "https://api.bilibili.com"
+  passport_url: "https://passport.bilibili.com"
+  
+browser:
+  headless: true
+  user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  timeout: 30s
+  pool_size: 2
+  viewport:
+    width: 1920
+    height: 1080
+
+# 可选功能配置
+features:
+  whisper:
+    enabled: true  # 默认关闭，需要用户手动安装
+    whisper_cpp_path: "~/whisper.cpp"  # Whisper.cpp 安装路径，支持 ~/path 和 ${VAR} 环境变量
+    model_path: "./models/ggml-tiny.bin"  # 使用最小模型
+    default_model: "auto"  # 智能选择最佳可用模型（推荐设置）
+    language: "zh"  # 识别语言
+    cpu_threads: 4  # CPU线程数
+    timeout_seconds: 1200  # 转换超时时间（秒，20分钟）
+    enable_gpu: true  # 启用GPU加速
+    enable_core_ml: true  # 启用Core ML加速（macOS）
+    
+logging:
+  level: "info"
+  format: "text"
+  output: "./logs/bilibili-mcp.log"
+
+# 多账号管理
+accounts:
+  cookie_dir: "./cookies"
+  default_account: ""
